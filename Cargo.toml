@@ -82,6 +82,7 @@ paste = "1.0.14"
 regex = "1.10.4"
 smart-default = "0.7.1"
 tracing = { version = "0.1.40", features = ["async-await", "log"] }
+halobar_fmt = { version = "0.1.0", path = "halobar_fmt" }
 
 [dependencies]
 ahash = { workspace = true }
@@ -100,8 +101,8 @@ paste = { workspace = true }
 regex = { workspace = true }
 smart-default = { workspace = true }
 tracing = { workspace = true }
+halobar_fmt = { workspace = true }
 
-halobar_fmt = { version = "0.1.0", path = "halobar_fmt" }
 
 color-eyre = { version = "0.6.3", features = [
     "capture-spantrace",

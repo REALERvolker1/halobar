@@ -11,3 +11,8 @@ authors.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+derive_more = { workspace = true }
+serde = { workspace = true }
+tracing = { workspace = true }
+smart-default = { workspace = true }
+halobar_fmt = { workspace = true }
