@@ -81,9 +81,6 @@ pub enum Error {
 mod test {
     use super::*;
 
-    /// path for temp testing files
-    const SWP_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/test");
-
     /// This is a fallible test! It relies on environment variables.
     #[test]
     fn config_home() {
@@ -107,9 +104,10 @@ mod test {
 
     #[test]
     fn read_write_config() {
-        let dir = Path::new(SWP_DIR);
+        // let dir = Path::new(SWP_DIR);
+        let dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
         if !dir.is_dir() {
-            fs::create_dir_all(dir).unwrap();
+            fs::create_dir_all(&dir).unwrap();
         }
         let path = dir.join("test.toml");
 
