@@ -11,12 +11,29 @@ authors.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ahash = { workspace = true }
-monoio = { workspace = true, optional = true }
-flume = { workspace = true }
-tracing = { workspace = true, optional = true }
-futures-util = { workspace = true }
+ahash = { version = "0.8", features = [
+    "serde",
+    "no-rng",
+    "std",
+], default-features = false, optional = true }
+monoio = { version = "0.2", features = [
+    "zero-copy",
+    "once_cell",
+    "signal",
+    "threadpool",
+], optional = true }
+flume = { version = "0.11", default-features = false, features = [
+    "async",
+    "nanorand",
+], optional = true }
+tracing = { version = "0.1", features = ["async-await"], optional = true }
+serde = { version = "1", features = ["derive"] }
+once_cell = { version = "1.19" }
+futures-util = "0.3"
 
 [features]
-tracing = ["dep:tracing"]
+tracing = ["dep:tracing", "monoio?/tracing"]
 monoio = ["dep:monoio"]
+ahash = ["dep:ahash"]
+parking_lot = ["once_cell/parking_lot"]
+flume = ["dep:flume", "monoio?/flume"]
