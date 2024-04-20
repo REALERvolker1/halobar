@@ -1,19 +1,26 @@
-pub mod r#macro;
+//! A library that provides helpful functions and macros for programs that need to read config files.
 
-use std::{env, path::PathBuf};
+#![forbid(missing_docs)]
+
+/// Private submodule for the config macro
+mod r#macro;
+
+use std::{
+    env, fs, io,
+    path::{Path, PathBuf},
+};
 
 /// The environment variable to query for the XDG config home
 const XDG_CONFIG_HOME: &str = "XDG_CONFIG_HOME";
-
 /// Directory stubs to append to the HOME environment variable. This is an array because the standard might change in the future
 const CONFIG_JOIN_STUBS: [&str; 1] = [".config"];
-
 /// The environment variable to query for the user home directory
 const HOME: &str = "HOME";
 
 /// Returns XDG_CONFIG_HOME without checking if it exists or is valid.
 ///
 /// Will return None if both the XDG_CONFIG_HOME and the HOME environment variables are unset.
+#[tracing::instrument(level = "trace")]
 pub fn xdg_config_home() -> Option<PathBuf> {
     if let Some(c) = env::var_os(XDG_CONFIG_HOME) {
         return Some(PathBuf::from(c));
@@ -28,6 +35,41 @@ pub fn xdg_config_home() -> Option<PathBuf> {
     }
 
     None
+}
+
+/// Try to deserialize a file into an object, providing the path.
+#[tracing::instrument(level = "debug")]
+pub fn try_from_path<D: serde::de::DeserializeOwned>(path: &Path) -> Result<D, Error> {
+    let bytes = fs::read(path)?;
+    let me = toml_edit::de::from_slice(&bytes)?;
+
+    Ok(me)
+}
+
+/// Try to deserialize a file. If that fails, print a message at error level and return the default as Err.
+#[tracing::instrument(level = "debug")]
+pub fn from_path_or_default<D: serde::de::DeserializeOwned + Default>(
+    path: Option<&Path>,
+) -> Result<D, D> {
+    if let Some(path) = path {
+        match try_from_path(path) {
+            Ok(c) => return Ok(c),
+            Err(e) => tracing::error!("Error reading config file '{}': {}", path.display(), e),
+        }
+    }
+
+    return Err(D::default());
+}
+
+/// The shared error type for halobar_config errors
+#[derive(Debug, derive_more::Error, derive_more::Display, derive_more::From)]
+pub enum Error {
+    /// std::io::Error
+    Io(io::Error),
+    /// An error deserializing into a struct
+    Deserialize(toml_edit::de::Error),
+    /// An error serializing into a string
+    Serialize(toml_edit::ser::Error),
 }
 
 #[cfg(test)]
