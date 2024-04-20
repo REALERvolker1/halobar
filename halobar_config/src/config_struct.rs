@@ -2,6 +2,7 @@
 ///
 /// generates `StructNameConfig` and `StructNameKnown` structs.
 /// `StructNameConfig` is full of `Option<T>`s that get converted to `T`s in `StructNameKnown::overlay`.
+///
 /// ```rust no_run
 /// config_struct! {
 ///     @known {Clone}  // extra derives for the known type
@@ -97,6 +98,7 @@ macro_rules! config_struct {
 
 #[cfg(test)]
 mod test {
+    use crate::config_struct;
     config_struct! {
         @known {Clone, Copy, PartialEq, Eq}
         @config {Clone, PartialEq}
