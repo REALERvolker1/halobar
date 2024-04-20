@@ -14,5 +14,4 @@ authors.workspace = true
 derive_more = { workspace = true }
 serde = { workspace = true }
 tracing = { workspace = true }
-smart-default = { workspace = true }
-halobar_fmt = { workspace = true }
+paste = { workspace = true }
