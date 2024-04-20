@@ -11,7 +11,7 @@ keywords.workspace = true
 categories.workspace = true
 
 [workspace]
-members = ["halobar_config", "halobar_core", "halobar_fmt"]
+members = ["halobar_config", "halobar_core", "halobar_fmt", "halogen"]
 
 [workspace.package]
 edition = "2021"
