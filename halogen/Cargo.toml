@@ -16,12 +16,11 @@ ahash = { version = "0.8", features = [
     "no-rng",
     "std",
 ], default-features = false, optional = true }
-monoio = { version = "0.2", features = [
+monoio = { version = "0.2.3", features = [
     "zero-copy",
-    "once_cell",
-    "signal",
-    "threadpool",
-], optional = true }
+    "bytes",
+    "iouring",
+], optional = true, default-features = false }
 flume = { version = "0.11", default-features = false, features = [
     "async",
     "nanorand",
