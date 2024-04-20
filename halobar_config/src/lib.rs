@@ -61,6 +61,12 @@ pub fn from_path_or_default<D: serde::de::DeserializeOwned + Default>(
     return Err(D::default());
 }
 
+/// Serialize the value into a pretty string
+#[inline]
+pub fn serialized_string<S: serde::Serialize>(value: &S) -> Result<String, toml_edit::ser::Error> {
+    toml_edit::ser::to_string(value)
+}
+
 /// The shared error type for halobar_config errors
 #[derive(Debug, derive_more::Error, derive_more::Display, derive_more::From)]
 pub enum Error {
@@ -75,6 +81,10 @@ pub enum Error {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    /// path for temp testing files
+    const SWP_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/test");
+
     /// This is a fallible test! It relies on environment variables.
     #[test]
     fn config_home() {
@@ -86,5 +96,36 @@ mod test {
         env::set_var(XDG_CONFIG_HOME, &cfg_home);
 
         assert_eq!(xdg_config_home().unwrap(), cfg_home);
+    }
+
+    config_struct! {
+        @config {PartialEq, Eq}
+        [TestFile]
+        value: u8 = 9,
+        is_enabled: bool = true,
+        name: String = "Theodore".to_owned(),
+    }
+
+    #[test]
+    fn read_write_config() {
+        let dir = Path::new(SWP_DIR);
+        if !dir.is_dir() {
+            fs::create_dir_all(dir).unwrap();
+        }
+        let path = dir.join("test.toml");
+
+        let my_config = TestFileKnown {
+            value: 32,
+            is_enabled: false,
+            name: "Sharon".into(),
+        };
+        let my_config_string = serialized_string(&my_config).unwrap();
+        fs::write(&path, my_config_string.as_bytes()).unwrap();
+
+        let read = from_path_or_default::<TestFileConfig>(Some(&path)).unwrap();
+
+        fs::remove_file(&path).unwrap();
+
+        assert_eq!(read, my_config.into_wrapped());
     }
 }
