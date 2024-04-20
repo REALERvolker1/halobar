@@ -3,22 +3,27 @@
 /// generates `StructNameConfig` and `StructNameKnown` structs.
 /// `StructNameConfig` is full of `Option<T>`s that get converted to `T`s in `StructNameKnown::overlay`.
 ///
-/// ```rust no_run
+/// ```
+/// use halobar_config::config_struct;
+/// pub mod attrs {
+///     use halobar_config::config_struct;
+///     config_struct! {
+///         @known {Clone, Copy, PartialEq, Eq}
+///         @config {Clone, PartialEq}
+///         [UserAttribute]
+///         id: u8 = 0,
+///     }
+/// }
+///
 /// config_struct! {
-///     @known {Clone}  // extra derives for the known type
-///     @config {Clone, PartialEq}   // extra derives for the config type
-///     [Window]
-///     inner_spacing: i32 = 10,
-///     border_width: u32 = 10,
-///
-///     // Additionally, you can nest `config_struct!`s and it "just works"
-///     @conf window: crate::frontend::frontend_config => Window,
-///     @conf log: crate::preinit::log => Log,
-///
-///     layer: Layer = Layer::Overlay,
-///     exclusive: bool = true,
-///
-///     edge: ScreenEdge = ScreenEdge::Bottom,
+///     @known {Clone, PartialEq, Eq}
+///     [User]
+///     @known #[serde(skip)]
+///     is_default: bool = true,
+///     @conf @config #[serde(flatten)]
+///     @conf test: attrs => UserAttribute,
+///     // due to syntax limitations, each nested config struct must be followed by a regular key-value.
+///     is_normal: &'static str = "maybe",
 /// }
 /// ```
 #[macro_export]
@@ -99,15 +104,17 @@ macro_rules! config_struct {
 #[cfg(test)]
 mod test {
     use crate::config_struct;
+
     config_struct! {
         @known {Clone, Copy, PartialEq, Eq}
-        @config {Clone, PartialEq}
+        @config {Clone, PartialEq, Eq}
         [Test]
-        id: u8 = 0,
+        id: u8 = 3,
     }
 
     config_struct! {
         @known {Clone, PartialEq, Eq}
+        @config {Clone, PartialEq, Eq}
         [TestNest]
         @known #[serde(skip)]
         is_default: bool = true,
@@ -133,5 +140,18 @@ mod test {
         };
 
         assert_eq!(conf_known, conf_definite)
+    }
+
+    #[test]
+    fn defaults() {
+        let conf = TestNestConfig {
+            is_default: Some(true),
+            test: TestConfig { id: Some(3) },
+            is_normal: Some("maybe"),
+        };
+        let known = TestNestKnown::default();
+        let known_wrapped = known.into_wrapped();
+
+        assert_eq!(conf, known_wrapped);
     }
 }

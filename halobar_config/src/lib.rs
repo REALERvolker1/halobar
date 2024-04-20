@@ -1,4 +1,4 @@
-mod config_struct;
+pub mod r#macro;
 
 use std::{env, path::PathBuf};
 
