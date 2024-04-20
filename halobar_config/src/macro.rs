@@ -53,6 +53,7 @@ macro_rules! config_struct {
             }
             impl [<$struct_name Known>] {
                 /// Create a new instance of Self, using a partial-type and substituting any None values with the defaults.
+                #[tracing::instrument(level = "trace", skip_all)]
                 pub fn overlay(conf: [<$struct_name Config>]) -> Self {
                     Self {
                         $(
@@ -67,6 +68,7 @@ macro_rules! config_struct {
                     }
                 }
                 /// Convert into a partial, Config-type.
+                #[tracing::instrument(level = "trace", skip_all)]
                 pub fn into_wrapped(self) -> [<$struct_name Config>] {
                     [<$struct_name Config>] {
                         $(
@@ -93,6 +95,8 @@ macro_rules! config_struct {
 
             impl [<$struct_name Config>] {
                 /// Convert into a Known-type, applying the default values if need be.
+                #[inline]
+                #[allow(dead_code)]
                 pub fn into_known(self) -> [<$struct_name Known>] {
                     [<$struct_name Known>]::overlay(self)
                 }
@@ -131,7 +135,9 @@ mod test {
             test: TestConfig { id: Some(69) },
             is_normal: None,
         };
-        let conf_known = conf.into_known();
+        let conf_known = conf.clone().into_known();
+
+        assert_eq!(conf_known.clone(), TestNestKnown::overlay(conf));
 
         let conf_definite = TestNestKnown {
             is_default: false,
@@ -153,5 +159,23 @@ mod test {
         let known_wrapped = known.into_wrapped();
 
         assert_eq!(conf, known_wrapped);
+    }
+
+    #[test]
+    fn overlaid() {
+        let conf = TestNestConfig {
+            is_default: Some(false),
+            test: TestConfig { id: None },
+            is_normal: Some("nope"),
+        };
+
+        let defaults = conf.into_known();
+        let known = TestNestKnown {
+            is_default: false,
+            test: TestKnown { id: 3 },
+            is_normal: "nope",
+        };
+
+        assert_eq!(defaults, known)
     }
 }
