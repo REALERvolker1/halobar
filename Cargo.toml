@@ -10,6 +10,9 @@ repository.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
+[workspace]
+members = ["halobar_core"]
+
 [workspace.package]
 edition = "2021"
 version = "0.1.0"
@@ -25,3 +28,5 @@ strip = true
 codegen-units = 1
 
 [dependencies]
+monoio = { version = "0.2.3", features = ["once_cell", "signal", "sync", "tracing", "threadpool", "zero-copy", "flume"] }
+once_cell = { version = "1.19.0", features = ["parking_lot"] }
