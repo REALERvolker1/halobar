@@ -63,8 +63,9 @@ pub fn from_path_or_default<D: serde::de::DeserializeOwned + Default>(
 
 /// Serialize the value into a pretty string
 #[inline]
+#[tracing::instrument(level = "trace", skip(value))]
 pub fn serialized_string<S: serde::Serialize>(value: &S) -> Result<String, toml_edit::ser::Error> {
-    toml_edit::ser::to_string(value)
+    toml_edit::ser::to_string_pretty(value)
 }
 
 /// The shared error type for halobar_config errors
@@ -74,8 +75,6 @@ pub enum Error {
     Io(io::Error),
     /// An error deserializing into a struct
     Deserialize(toml_edit::de::Error),
-    /// An error serializing into a string
-    Serialize(toml_edit::ser::Error),
 }
 
 #[cfg(test)]
