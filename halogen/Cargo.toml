@@ -32,8 +32,12 @@ once_cell = { version = "1.19" }
 futures-util = "0.3"
 
 [features]
+default = ["tracing", "monoio", "ahash", "parking_lot", "flume"]
 tracing = ["dep:tracing", "monoio?/tracing"]
 monoio = ["dep:monoio"]
 ahash = ["dep:ahash"]
 parking_lot = ["once_cell/parking_lot"]
 flume = ["dep:flume", "monoio?/flume"]
+
+[dev-dependencies]
+serde_json = "1.0.116"
