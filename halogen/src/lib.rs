@@ -3,40 +3,15 @@ pub mod v1;
 /// Use the current version's definitions
 pub use v1::*;
 
-/// An internal library for json abstractions
-pub(crate) mod json;
+/// An internal library for stuff imported from other crates
+pub(crate) mod imports;
 
-use std::{env, path::PathBuf, sync::Arc};
+pub mod server;
 
-#[cfg(feature = "flume")]
-use flume::unbounded;
-
-#[cfg(feature = "flume")]
-pub type ServerSender<T> = flume::Sender<T>;
-#[cfg(feature = "flume")]
-pub type ServerReceiver<T> = flume::Receiver<T>;
+use std::{env, path::PathBuf};
 
 /// Override the path to the socket.
 pub const SOCKET_OVERRIDE_VARIABLE: &str = "HALOGEN_SOCK";
-
-pub struct Server {
-    pub socket_path: PathBuf,
-    /// A Sender to send messages to the socket
-    pub sender: Arc<ServerSender<Message>>,
-    receiver: ServerReceiver<Message>,
-}
-impl Server {
-    pub async fn new() -> Result<Self, Error> {
-        let socket_path = get_socket_path()?;
-        let (s, receiver) = unbounded();
-
-        Ok(Self {
-            socket_path,
-            sender: Arc::new(s),
-            receiver,
-        })
-    }
-}
 
 /// Try to get a valid socket path location
 pub fn get_socket_path() -> Result<PathBuf, Error> {
@@ -64,6 +39,11 @@ pub fn get_socket_path() -> Result<PathBuf, Error> {
     Ok(runtime_dir)
 }
 
+#[cfg(feature = "serde_json")]
+use serde_json::Error as JsonError;
+#[cfg(feature = "simd-json")]
+use simd_json::Error as JsonError;
+
 /// All the errors returned by this crate
 #[derive(Debug)]
 pub enum Error {
@@ -71,6 +51,8 @@ pub enum Error {
     Io(std::io::Error),
     /// An error returned by [`get_socket_path`] when the socket path is invalid.
     InvalidSocketPath(PathBuf),
+    /// An error that occured when parsing json
+    Json(JsonError),
 }
 impl std::error::Error for Error {}
 impl std::fmt::Display for Error {
@@ -78,11 +60,17 @@ impl std::fmt::Display for Error {
         match self {
             Self::Io(e) => e.fmt(f),
             Self::InvalidSocketPath(p) => write!(f, "Invalid socket path: {}", p.display()),
+            Self::Json(e) => e.fmt(f),
         }
     }
 }
 impl From<std::io::Error> for Error {
     fn from(value: std::io::Error) -> Self {
         Self::Io(value)
+    }
+}
+impl From<JsonError> for Error {
+    fn from(value: JsonError) -> Self {
+        Self::Json(value)
     }
 }

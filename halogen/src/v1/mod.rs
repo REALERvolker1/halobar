@@ -126,8 +126,8 @@ impl Message {
     // pub fn new(key: &str)
     /// Deserialize a message from raw json
     #[cfg_attr(feature = "tracing", ::tracing::instrument(level = "debug", skip_all))]
-    pub fn try_from_raw(json: &str) -> Result<Self, crate::json::Error> {
-        crate::json::from_string(json)
+    pub fn try_from_raw(json: &str) -> Result<Self, crate::imports::Error> {
+        crate::imports::from_string(json)
     }
 }
 
@@ -180,7 +180,7 @@ impl std::fmt::Display for Status {
 mod tests {
     use super::*;
 
-    use crate::json::{from_string, to_string_pretty};
+    use crate::imports::{from_string, to_string_pretty};
 
     #[test]
     fn deserialize_variants() {
