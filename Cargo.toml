@@ -1,0 +1,27 @@
+[package]
+name = "halobar"
+readme = "README.md"
+description = "A rusty, ice-cold statusbar for Wayland"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[workspace.package]
+edition = "2021"
+version = "0.1.0"
+license = "AGPL-3.0-only"
+repository = "https://github.com/REALERvolker1/halobar"
+keywords = ["hyprland", "layer-shell", "gui", "wayland", "linux"]
+categories = ["GUI", "Asynchronous"]
+authors = ["volker1 <73304952+REALERvolker1@users.noreply.github.com>"]
+
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1
+
+[dependencies]
