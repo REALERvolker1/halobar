@@ -1,17 +1,18 @@
-use serde::{Deserialize, Serialize};
+use std::{convert::Infallible, path::PathBuf, str::FromStr};
 
-#[cfg(feature = "ahash")]
 use ahash::HashMap;
-#[cfg(not(feature = "ahash"))]
-use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
 
 /// A recognized type that can be sent through IPC
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Variant {
     /// A literal string of text. Only meant to be used for Strings.
     ///
-    /// Please use [`Variant::Other`] for custom data types.
+    /// Please use [`Variant::Other`] for custom data types,
+    /// and [`Variant::Path`] for paths to files or directories.
     String(String),
+    /// A verified filepath
+    Path(PathBuf),
 
     /// A boolean value, Accepts true/false, on/off, 1/0, case-insensitive
     Bool(bool),
@@ -23,20 +24,98 @@ pub enum Variant {
     Float(f64),
 
     /// Multiple other Variants in a single-dimensional vector
-    Vector(Vec<Box<Variant>>),
+    Vec(Vec<Box<Variant>>),
     /// Multiple other variants in a key-value map. The keys can only be Strings.
     Map(HashMap<String, Box<Variant>>),
 
     /// Another data type, possibly serialized as a String.
     Other(String),
 }
+impl FromStr for Variant {
+    type Err = Infallible;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::String(s.to_owned()))
+    }
+}
+macro_rules! impl_inner {
+    ($($ty:ty: $variant:tt),+) => {
+        $(
+            impl From<$ty> for Variant {
+                fn from(value: $ty) -> Self {
+                    Self::$variant(value)
+                }
+            }
+        )+
+    };
+    (@iint $($ty:ty),+) => {
+        $(
+            impl From<$ty> for Variant {
+                fn from(value: $ty) -> Self {
+                    Self::Iint(value as i64)
+                }
+            }
+        )+
+    };
+    (@uint $($ty:ty),+) => {
+        $(
+            impl From<$ty> for Variant {
+                fn from(value: $ty) -> Self {
+                    Self::Uint(value as u64)
+                }
+            }
+        )+
+    };
+}
+impl_inner![String: String, PathBuf: Path, bool: Bool, i64: Iint, u64: Uint, f64: Float];
+impl_inner![@iint i8, i16, i32, isize];
+impl_inner![@uint u8, u16, u32, usize];
+
+impl Variant {
+    /// Create a [`Variant::Vec`] from a Vector or Iterator-like.
+    pub fn from_iterator<I: IntoIterator<Item = Self>>(vec: I) -> Self {
+        Self::Vec(vec.into_iter().map(|v| Box::new(v)).collect())
+    }
+    /// Get a wholly owned Vec from this Variant, if it is a Vec type. Otherwise returns the provided Variant.
+    pub fn unboxed_vec(self) -> Result<Vec<Variant>, Variant> {
+        if let Self::Vec(v) = self {
+            let unboxed = v.into_iter().map(|b| *b).collect();
+            return Ok(unboxed);
+        }
+        Err(self)
+    }
+    /// Get a wholly owned hashmap out of this Variant. Only works for Map types, please see [`Variant::unboxed_vec`]
+    pub fn unboxed_hashmap(self) -> Result<HashMap<String, Variant>, Variant> {
+        if let Self::Map(m) = self {
+            let unboxed = m.into_iter().map(|(k, v)| (k, *v)).collect();
+            return Ok(unboxed);
+        }
+        Err(self)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Message {
+    /// The API version that created this Message
+    pub version: u8,
+    /// The name of this message
+    pub key: String,
+    /// Inner data payload
+    pub data: HashMap<String, Variant>,
+}
+impl Message {
+    // pub fn new(key: &str)
+    /// Deserialize a message from raw json
+    pub fn try_from_raw(json: &str) -> Result<Self, crate::json::Error> {
+        crate::json::from_string(json)
+    }
+}
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
-    #[cfg(feature = "ahash")]
     use ahash::HashMapExt;
+
+    use crate::json::{from_string, to_string_pretty};
 
     #[test]
     fn deserialize_variants() {
@@ -45,6 +124,7 @@ mod tests {
             "string".to_owned(),
             Variant::String("Hello world!".to_owned()),
         );
+        variants.insert("path".to_owned(), Variant::Path(PathBuf::from("/usr/bin")));
         variants.insert("bool".to_owned(), Variant::Bool(true));
         variants.insert("signed int".to_owned(), Variant::Iint(-673485));
         variants.insert("unsigned_int".to_owned(), Variant::Uint(678656397));
@@ -52,7 +132,7 @@ mod tests {
 
         variants.insert(
             "vector".to_owned(),
-            Variant::Vector(vec![
+            Variant::Vec(vec![
                 Box::new(Variant::Iint(-785)),
                 Box::new(Variant::String("Hello World".to_owned())),
             ]),
@@ -67,9 +147,9 @@ mod tests {
 
         variants.insert("map".to_owned(), Variant::Map(map));
 
-        let json = serde_json::to_string_pretty(&variants).unwrap();
+        let json = to_string_pretty(&variants).unwrap();
 
-        let from_json: HashMap<String, Variant> = serde_json::from_str(&json).unwrap();
+        let from_json: HashMap<String, Variant> = from_string(&json).unwrap();
 
         assert_eq!(from_json, variants);
     }
