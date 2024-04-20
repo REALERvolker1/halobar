@@ -1,3 +1,4 @@
+pub mod logging;
 pub mod prelude;
 
 #[cfg(target_os = "linux")]
