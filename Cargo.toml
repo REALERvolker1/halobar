@@ -106,6 +106,7 @@ flume = { version = "0.11.0", default-features = false, features = [
 halobar_fmt = { path = "halobar_fmt" }
 halobar_core = { path = "halobar_core" }
 halobar_config = { path = "halobar_config" }
+halogen = { path = "halogen" }
 
 [dependencies]
 ahash = { workspace = true }
@@ -128,6 +129,7 @@ tokio = { workspace = true }
 halobar_fmt = { workspace = true }
 halobar_core = { workspace = true }
 halobar_config = { workspace = true }
+halogen = { workspace = true }
 
 color-eyre = { version = "0.6.3", features = [
     "capture-spantrace",
