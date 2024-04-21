@@ -55,6 +55,8 @@ pub enum Error {
     Json(JsonError),
     /// An error that is returned from futures that ended too early
     EarlyReturn,
+    /// An error sending data through a channel
+    SendError,
 }
 impl std::error::Error for Error {}
 impl std::fmt::Display for Error {
@@ -64,6 +66,7 @@ impl std::fmt::Display for Error {
             Self::InvalidSocketPath(p) => write!(f, "Invalid socket path: {}", p.display()),
             Self::Json(e) => e.fmt(f),
             Self::EarlyReturn => "Future returned too early".fmt(f),
+            Self::SendError => "Error sending message through channel".fmt(f),
         }
     }
 }
@@ -77,3 +80,15 @@ impl From<JsonError> for Error {
         Self::Json(value)
     }
 }
+macro_rules! senderr {
+    ($($module:tt),+) => {
+        $(
+            impl<T> From<::tokio::sync::$module::error::SendError<T>> for Error {
+                fn from(_: ::tokio::sync::$module::error::SendError<T>) -> Self {
+                    Self::SendError
+                }
+            }
+        )+
+    };
+}
+senderr![mpsc, broadcast, watch];

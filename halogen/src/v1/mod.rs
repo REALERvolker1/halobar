@@ -115,9 +115,14 @@ pub struct Message {
     /// The current status. Signifies the current state of things.
     pub status: Status,
     /// The name of this message
-    pub key: String,
+    pub name: String,
     /// Inner data payload
     pub data: HashMap<String, Variant>,
+}
+impl Default for Message {
+    fn default() -> Self {
+        Self::new(Status::default(), String::new(), HashMap::new())
+    }
 }
 impl Message {
     // pub fn new(key: &str)
@@ -125,6 +130,19 @@ impl Message {
     #[cfg_attr(feature = "tracing", ::tracing::instrument(level = "debug", skip_all))]
     pub fn try_from_raw(json: &str) -> Result<Self, crate::imports::Error> {
         crate::imports::from_string(json)
+    }
+    pub fn new<S: Into<String>>(status: Status, name: S, data: HashMap<String, Variant>) -> Self {
+        Self {
+            version: 1,
+            status,
+            name: name.into(),
+            data,
+        }
+    }
+    /// Serialize this message into json fit to send to the socket.
+    pub fn into_json(&self) -> Result<String, Error> {
+        let out = to_string(self)?;
+        Ok(out)
     }
 }
 
@@ -177,7 +195,7 @@ impl std::fmt::Display for Status {
 mod tests {
     use super::*;
 
-    use crate::imports::{from_string, to_string_pretty};
+    use crate::imports::{from_string, to_string};
 
     #[test]
     fn deserialize_variants() {
@@ -209,7 +227,7 @@ mod tests {
 
         variants.insert("map".to_owned(), Variant::Map(map));
 
-        let json = to_string_pretty(&variants).unwrap();
+        let json = to_string(&variants).unwrap();
 
         let from_json: HashMap<String, Variant> = from_string(&json).unwrap();
 

@@ -7,32 +7,25 @@ pub(crate) use std::{convert::Infallible, path::PathBuf, str::FromStr, sync::Arc
 pub(crate) use ahash::{HashMap, HashMapExt};
 pub(crate) use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "tokio")]
-mod tokio_types {
-    pub use tokio::sync::mpsc;
-    pub type ServerSender<T> = mpsc::UnboundedSender<T>;
-    pub type ServerReceiver<T> = mpsc::UnboundedReceiver<T>;
-
-    pub use tokio::{
-        io::{self, AsyncBufRead, AsyncRead, AsyncWrite},
-        join,
-        net::{UnixListener, UnixStream},
-        select, try_join,
-    };
-}
-#[cfg(feature = "tokio")]
-pub use tokio_types::*;
+pub use tokio::{
+    io::{self, AsyncBufRead, AsyncRead, AsyncWrite},
+    join,
+    net::{UnixListener, UnixStream},
+    select,
+    sync::{mpsc, watch},
+    try_join,
+};
 
 // #[inline]
 // pub fn to_string_pretty<S: ?Sized + Serialize>(value: &S) -> Result<String, serde_json::Error> {
 //     serde_json::to_string_pretty(value)
 // }
 
-#[cfg(all(test, feature = "serde_json"))]
-pub use serde_json::to_string_pretty;
+#[cfg(feature = "serde_json")]
+pub use serde_json::to_string;
 
-#[cfg(all(test, feature = "simd-json"))]
-pub use simd_json::to_string_pretty;
+#[cfg(feature = "simd-json")]
+pub use simd_json::to_string;
 
 #[cfg(feature = "serde_json")]
 #[inline]
