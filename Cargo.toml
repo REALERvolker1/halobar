@@ -141,3 +141,4 @@ uuid = { version = "1.8.0", features = ["v4", "fast-rng", "serde", "zerocopy"] }
 nix = { version = "0.28.0", features = ["fs", "user", "hostname"] }
 
 tracing-appender = { version = "0.2.3", features = ["parking_lot"] }
+io-uring = "0.6.3"

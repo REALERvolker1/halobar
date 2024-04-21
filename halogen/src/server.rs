@@ -1,5 +1,3 @@
-use monoio::net::UnixListener;
-
 use crate::imports::*;
 
 pub struct Server {
@@ -17,7 +15,7 @@ impl Server {
         // let stream = UnixStream::connect(&socket_path).await?;
         let socket = UnixListener::bind(socket_path)?;
 
-        let (s, receiver) = unbounded();
+        let (s, receiver) = mpsc::unbounded_channel();
 
         Ok(Self {
             sender: Arc::new(s),
@@ -31,20 +29,6 @@ impl Server {
     /// Consider spawning this on another async task, or joining this with another future that runs indefinitely.
     #[cfg_attr(feature = "tracing", ::tracing::instrument(level = "debug", skip_all))]
     pub async fn read_forever(&mut self) -> Result<(), Error> {
-        while let Some(value) = self.socket.next().await {
-            let (mut stream, address) = value?;
-
-            let mut buf = Vec::with_capacity(8192);
-
-            loop {
-                let (maybe_len, buffer) = stream.read(buf).await;
-                if maybe_len? == 0 {
-                    break;
-                }
-                println!("Received bytes: {:?}", buffer.as_slice());
-                buf = buffer;
-            }
-        }
         Err(Error::EarlyReturn)
     }
 }

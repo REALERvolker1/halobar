@@ -7,26 +7,21 @@ pub(crate) use std::{convert::Infallible, path::PathBuf, str::FromStr, sync::Arc
 pub(crate) use ahash::{HashMap, HashMapExt};
 pub(crate) use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "monoio")]
-mod monoio_types {
-    pub use flume::unbounded;
-    pub type ServerSender<T> = flume::Sender<T>;
-    pub type ServerReceiver<T> = flume::Receiver<T>;
+#[cfg(feature = "tokio")]
+mod tokio_types {
+    pub use tokio::sync::mpsc;
+    pub type ServerSender<T> = mpsc::UnboundedSender<T>;
+    pub type ServerReceiver<T> = mpsc::UnboundedReceiver<T>;
 
-    pub use monoio::{
-        buf::IoBufMut,
-        io::{
-            self,
-            stream::{Stream, StreamExt},
-            AsyncBufRead, AsyncBufReadExt, AsyncReadRent, AsyncReadRentExt,
-        },
+    pub use tokio::{
+        io::{self, AsyncBufRead, AsyncRead, AsyncWrite},
         join,
-        net::UnixStream,
+        net::{UnixListener, UnixStream},
         select, try_join,
     };
 }
-#[cfg(feature = "monoio")]
-pub use monoio_types::*;
+#[cfg(feature = "tokio")]
+pub use tokio_types::*;
 
 // #[inline]
 // pub fn to_string_pretty<S: ?Sized + Serialize>(value: &S) -> Result<String, serde_json::Error> {
