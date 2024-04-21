@@ -1,8 +1,3 @@
-use std::intrinsics::unreachable;
-
-use futures_util::TryFutureExt;
-use tokio::task::JoinHandle;
-
 use crate::imports::*;
 
 #[derive(Debug)]
@@ -15,7 +10,7 @@ pub struct Interface {
 }
 impl Interface {
     /// Create a new [`Server`] to primarily write to the socket
-    #[cfg_attr(feature = "tracing", ::tracing::instrument(level = "debug", skip_all))]
+    #[instrument(level = "debug", skip_all)]
     pub async fn new() -> Result<(Self, InterfaceStub), Error> {
         let socket_path = crate::get_socket_path()?;
 
@@ -61,14 +56,11 @@ impl Interface {
                 let (stream, address) = match self.socket.accept().await {
                     Ok(s) => s,
                     Err(e) => {
-                        #[cfg(feature = "tracing")]
-                        tracing::warn!("Halogen server could not accept connection: {e}");
+                        warn!("Halogen server could not accept connection: {e}");
                         break;
                     }
                 };
-
-                #[cfg(feature = "tracing")]
-                tracing::debug!(
+                debug!(
                     "Halogen server received connection from address: {:?}",
                     address.as_pathname()
                 );
@@ -82,7 +74,7 @@ impl Interface {
 
                     match res {
                         Ok(((), ())) => unreachable!(),
-                        Err(e) => tracing::error!("{e}"),
+                        Err(e) => error!("{e}"),
                     }
                 });
                 handles.push(handle);
@@ -105,6 +97,7 @@ impl Interface {
 
         Err(Error::EarlyReturn)
     }
+    #[instrument(level = "debug", skip_all)]
     async fn write_socket_forever(
         receiver: Arc<flume::Receiver<Message>>,
         stream: &UnixStream,
@@ -114,7 +107,7 @@ impl Interface {
             let message_serialized = match message.into_json() {
                 Ok(m) => m,
                 Err(e) => {
-                    tracing::warn!("Failed to serialize message: {e}");
+                    warn!("Failed to serialize message: {e}");
                     continue;
                 }
             };
@@ -124,6 +117,7 @@ impl Interface {
     }
     // /// Receive messages from [`InterfaceStub`]s and send them to the channel.
     // pub async fn receive_messages(&self)
+    #[instrument(level = "debug", skip_all)]
     async fn read_socket_forever(
         sender: Arc<flume::Sender<Message>>,
         stream: &UnixStream,
@@ -144,8 +138,7 @@ impl Interface {
                 let decoded = match std::str::from_utf8(&buffer) {
                     Ok(s) => s,
                     Err(e) => {
-                        #[cfg(feature = "tracing")]
-                        tracing::warn!("Halogen server decoding error: {e}");
+                        warn!("Halogen server decoding error: {e}");
                         continue;
                     }
                 };
@@ -160,8 +153,7 @@ impl Interface {
                     let msg = match Message::try_from_raw(&partial_line) {
                         Ok(m) => m,
                         Err(e) => {
-                            #[cfg(feature = "tracing")]
-                            tracing::warn!("Halogen server decoding error: {e}");
+                            warn!("Halogen server decoding error: {e}");
                             // it isn't the end of the world, it's just one message
                             return Ok(());
                         }
@@ -188,13 +180,13 @@ impl Drop for Interface {
             InterfaceState::Server => {
                 if self.socket_path.is_file() {
                     if let Err(e) = std::fs::remove_file(&self.socket_path) {
-                        tracing::error!(
+                        error!(
                             "Failed to remove socket path: {e} at {}",
                             self.socket_path.display()
                         );
                     }
                 } else {
-                    tracing::debug!("Removing socket path: {}", self.socket_path.display());
+                    debug!("Removing socket path: {}", self.socket_path.display());
                 }
             }
         }
@@ -216,6 +208,7 @@ impl InterfaceState {
     fn try_server(&mut self) -> Result<(), Error> {
         if *self == InterfaceState::PotentialServer {
             *self = Self::Server;
+            return Ok(());
         }
         Err(Error::InvalidState(*self))
     }

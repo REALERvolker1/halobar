@@ -84,12 +84,12 @@ impl<S: Into<String>, V: Into<Variant>, R> From<std::collections::HashMap<S, V, 
 
 impl Variant {
     /// Create a [`Variant::Vec`] from a Vector or Iterator-like.
-    #[cfg_attr(feature = "tracing", ::tracing::instrument(level = "trace", skip_all))]
+    #[instrument(level = "trace", skip_all)]
     pub fn from_iterator<I: IntoIterator<Item = Self>>(vec: I) -> Self {
         Self::Vec(vec.into_iter().map(|v| Box::new(v)).collect())
     }
     /// Get a wholly owned Vec from this Variant, if it is a Vec type. Otherwise returns the provided Variant.
-    #[cfg_attr(feature = "tracing", ::tracing::instrument(level = "trace", skip_all))]
+    #[instrument(level = "trace", skip_all)]
     pub fn unboxed_vec(self) -> Result<Vec<Variant>, Variant> {
         if let Self::Vec(v) = self {
             let unboxed = v.into_iter().map(|b| *b).collect();
@@ -98,7 +98,7 @@ impl Variant {
         Err(self)
     }
     /// Get a wholly owned hashmap out of this Variant. Only works for Map types, please see [`Variant::unboxed_vec`]
-    #[cfg_attr(feature = "tracing", ::tracing::instrument(level = "trace", skip_all))]
+    #[instrument(level = "trace", skip_all)]
     pub fn unboxed_hashmap(self) -> Result<HashMap<String, Variant>, Variant> {
         if let Self::Map(m) = self {
             let unboxed = m.into_iter().map(|(k, v)| (k, *v)).collect();
@@ -134,12 +134,12 @@ impl Default for Message {
 impl Message {
     // pub fn new(key: &str)
     /// Deserialize a message from raw json
-    #[cfg_attr(feature = "tracing", ::tracing::instrument(level = "trace", skip_all))]
+    #[instrument(level = "trace", skip_all)]
     pub fn try_from_raw(json: &str) -> Result<Self, crate::imports::Error> {
         crate::imports::from_string(json)
     }
     /// Create a new message directly. Not recommended to use -- instead, use the helper impls provided by dedicated interfaces.
-    #[cfg_attr(feature = "tracing", ::tracing::instrument(level = "debug", skip_all))]
+    #[instrument(level = "debug", skip_all)]
     pub fn new<S: Into<String>>(
         status: Status,
         sender_type: SenderType,
@@ -155,7 +155,7 @@ impl Message {
         }
     }
     /// Serialize this message into json fit to send to the socket.
-    #[cfg_attr(feature = "tracing", ::tracing::instrument(level = "trace", skip_all))]
+    #[instrument(level = "trace", skip_all)]
     pub fn into_json(&self) -> Result<String, Error> {
         let out = to_string(self)?;
         Ok(out)
@@ -204,7 +204,6 @@ impl Status {
     /// // logs at the warn level
     /// my_status.trace(format_args!("Time elapsed: {} seconds", 6));
     /// ```
-    #[cfg(feature = "tracing")]
     pub fn trace(&self, message: std::fmt::Arguments<'_>) {
         match self {
             Self::Good | Self::Normal => tracing::info!(message),

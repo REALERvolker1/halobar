@@ -11,7 +11,7 @@ authors.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [[bin]]
-name = "bin"
+name = "halogen"
 
 [dependencies]
 ahash = { version = "0.8", features = [
@@ -26,9 +26,10 @@ tokio = { version = "1.37", features = [
     "sync",
     "test-util",
     "net",
+    "tracing",
 ] }
 
-tracing = { version = "0.1", features = ["async-await"], optional = true }
+tracing = { version = "0.1", features = ["async-await"] }
 serde = { version = "1", features = ["derive"] }
 once_cell = { version = "1.19" }
 futures-util = { version = "0.3", default-features = false, features = [
@@ -43,11 +44,10 @@ tracing-subscriber = { version = "0.3.18", features = [
 flume = { version = "0.11.0", default-features = false, features = ["async"] }
 
 [features]
-default = ["tracing", "simd-json", "bin"]
+default = ["simd-json", "bin"]
 
-bin = ["tracing", "simd-json", "parking_lot", "dep:tracing-subscriber"]
+bin = ["simd-json", "parking_lot", "dep:tracing-subscriber"]
 
-tracing = ["dep:tracing", "tokio/tracing"]
 parking_lot = [
     "once_cell/parking_lot",
     "tokio/parking_lot",
