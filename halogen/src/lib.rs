@@ -59,6 +59,9 @@ pub enum Error {
     SendError,
     /// An error joining a task
     JoinError(tokio::task::JoinError),
+    InvalidState(interface::InterfaceState),
+    /// Other errors that don't really fit well
+    Internal(&'static str),
 }
 impl std::error::Error for Error {}
 impl std::fmt::Display for Error {
@@ -70,6 +73,8 @@ impl std::fmt::Display for Error {
             Self::EarlyReturn => "Future returned too early".fmt(f),
             Self::SendError => "Error sending message through channel".fmt(f),
             Self::JoinError(e) => e.fmt(f),
+            Self::InvalidState(s) => write!(f, "Invalid interface state: {s:?}"),
+            Self::Internal(e) => e.fmt(f),
         }
     }
 }

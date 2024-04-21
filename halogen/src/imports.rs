@@ -1,18 +1,17 @@
-use serde::de::DeserializeOwned;
+pub(crate) use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-pub(crate) use crate::{Error, Message, Variant};
+pub(crate) use crate::{Error, Message};
 
 pub(crate) use std::{convert::Infallible, path::PathBuf, str::FromStr, sync::Arc};
 
 pub(crate) use ahash::{HashMap, HashMapExt};
-pub(crate) use serde::{Deserialize, Serialize};
-
-pub use tokio::{
+pub(crate) use futures_util::StreamExt;
+pub(crate) use tokio::{
     io::{self, AsyncBufRead, AsyncRead, AsyncWrite},
     join,
     net::{UnixListener, UnixStream},
     select,
-    sync::{mpsc, watch},
+    sync::{mpsc, watch, RwLock, Mutex},
     try_join,
 };
 
