@@ -57,6 +57,8 @@ pub enum Error {
     EarlyReturn,
     /// An error sending data through a channel
     SendError,
+    /// An error receiving data from a channel
+    RecvError,
     /// An error joining a task
     JoinError(tokio::task::JoinError),
     InvalidState(interface::InterfaceState),
@@ -72,6 +74,7 @@ impl std::fmt::Display for Error {
             Self::Json(e) => e.fmt(f),
             Self::EarlyReturn => "Future returned too early".fmt(f),
             Self::SendError => "Error sending message through channel".fmt(f),
+            Self::RecvError => "Error receiving message from channel".fmt(f),
             Self::JoinError(e) => e.fmt(f),
             Self::InvalidState(s) => write!(f, "Invalid interface state: {s:?}"),
             Self::Internal(e) => e.fmt(f),
@@ -93,6 +96,7 @@ impl From<tokio::task::JoinError> for Error {
         Self::JoinError(value)
     }
 }
+
 macro_rules! senderr {
     ($($module:tt),+) => {
         $(
@@ -103,8 +107,28 @@ macro_rules! senderr {
             }
         )+
     };
+    (flume $($err:tt),+) => {
+        $(
+            impl<T> From<::flume::$err<T>> for Error {
+                fn from(_: ::flume::$err<T>) -> Self {
+                    Self::SendError
+                }
+            }
+        )+
+    };
+    (flume recv $($err:tt),+) => {
+        $(
+            impl From<::flume::$err> for Error {
+                fn from(_: ::flume::$err) -> Self {
+                    Self::RecvError
+                }
+            }
+        )+
+    }
 }
 senderr![mpsc, broadcast, watch];
+senderr![flume SendError, TrySendError, SendTimeoutError];
+senderr![flume recv RecvError, RecvTimeoutError, TryRecvError];
 
 // /// A set of futures that poll but also let you insert
 // #[derive(Debug)]

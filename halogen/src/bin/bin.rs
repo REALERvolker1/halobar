@@ -14,7 +14,7 @@ fn main() -> Result<(), halogen::Error> {
     logger.init();
 
     let future = async move {
-        let mut server = halogen::interface::Interface::new().await?;
+        let (mut server, stub) = halogen::interface::Interface::new().await?;
 
         let server_handle = tokio::spawn(async move { server.server().await });
 

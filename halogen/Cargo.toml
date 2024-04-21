@@ -40,6 +40,7 @@ simd-json = { version = "0.13", optional = true, features = ["known-key"] }
 tracing-subscriber = { version = "0.3.18", features = [
     "once_cell",
 ], optional = true }
+flume = { version = "0.11.0", default-features = false, features = ["async"] }
 
 [features]
 default = ["tracing", "simd-json", "bin"]

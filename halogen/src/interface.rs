@@ -1,4 +1,7 @@
-use std::ops::Deref;
+use std::intrinsics::unreachable;
+
+use futures_util::TryFutureExt;
+use tokio::task::JoinHandle;
 
 use crate::imports::*;
 
@@ -6,18 +9,14 @@ use crate::imports::*;
 pub struct Interface {
     socket_path: PathBuf,
     state: InterfaceState,
-    /// A Sender to send messages to the socket
-    pub sender: Arc<mpsc::UnboundedSender<Message>>,
-    my_receiver: mpsc::UnboundedReceiver<Message>,
-    sub_sender: Arc<watch::Sender<Message>>,
-    /// receiver to receive messages from the socket
-    pub receiver: Arc<watch::Receiver<Message>>,
+    my_receiver: Arc<flume::Receiver<Message>>,
+    sub_sender: Arc<flume::Sender<Message>>,
     socket: UnixListener,
 }
 impl Interface {
     /// Create a new [`Server`] to primarily write to the socket
     #[cfg_attr(feature = "tracing", ::tracing::instrument(level = "debug", skip_all))]
-    pub async fn new() -> Result<Self, Error> {
+    pub async fn new() -> Result<(Self, InterfaceStub), Error> {
         let socket_path = crate::get_socket_path()?;
 
         let state = if socket_path.exists() {
@@ -29,18 +28,23 @@ impl Interface {
         // let stream = UnixStream::connect(&socket_path).await?;
         let socket = UnixListener::bind(&socket_path)?;
 
-        let (s, my_receiver) = mpsc::unbounded_channel();
-        let (ss, sr) = watch::channel(Message::default());
+        let (s, my_receiver) = flume::unbounded();
+        let (sub_sender, sr) = flume::unbounded();
 
-        Ok(Self {
+        let me = Self {
             socket_path,
             state,
-            sender: Arc::new(s),
-            my_receiver,
-            sub_sender: Arc::new(ss),
-            receiver: Arc::new(sr),
+            my_receiver: Arc::new(my_receiver),
+            sub_sender: Arc::new(sub_sender),
             socket,
-        })
+        };
+
+        let stub = InterfaceStub {
+            sender: Arc::new(s),
+            receiver: Arc::new(sr),
+        };
+
+        Ok((me, stub))
     }
     /// Act as a server for the socket.
     ///
@@ -49,38 +53,80 @@ impl Interface {
     /// Consider spawning this on another async task, or joining this with another future that runs indefinitely.
     pub async fn server(&mut self) -> Result<(), Error> {
         self.state.try_server()?;
-        let mut handles = futures_util::stream::FuturesUnordered::new();
 
-        loop {
-            let (stream, address) = match self.socket.accept().await {
-                Ok(s) => s,
-                Err(e) => {
-                    #[cfg(feature = "tracing")]
-                    tracing::warn!("Halogen server could not accept connection: {e}");
-                    break;
-                }
-            };
+        let my_serve = async {
+            let mut handles = futures_util::stream::FuturesUnordered::new();
 
-            #[cfg(feature = "tracing")]
-            tracing::debug!(
-                "Halogen server received connection from address: {:?}",
-                address.as_pathname()
-            );
-            let owned_sender = Arc::clone(&self.sub_sender);
-            let handle =
-                tokio::spawn(async move { Self::read_socket_forever(owned_sender, stream).await });
-            handles.push(handle);
-        }
+            loop {
+                let (stream, address) = match self.socket.accept().await {
+                    Ok(s) => s,
+                    Err(e) => {
+                        #[cfg(feature = "tracing")]
+                        tracing::warn!("Halogen server could not accept connection: {e}");
+                        break;
+                    }
+                };
 
-        while let Some(join) = handles.next().await {
-            join??;
-        }
+                #[cfg(feature = "tracing")]
+                tracing::debug!(
+                    "Halogen server received connection from address: {:?}",
+                    address.as_pathname()
+                );
+                let owned_sender = Arc::clone(&self.sub_sender);
+                let owned_receiver = Arc::clone(&self.my_receiver);
+                let handle = tokio::spawn(async move {
+                    let res = tokio::try_join!(
+                        Self::read_socket_forever(owned_sender, &stream),
+                        Self::write_socket_forever(owned_receiver, &stream)
+                    );
+
+                    match res {
+                        Ok(((), ())) => unreachable!(),
+                        Err(e) => tracing::error!("{e}"),
+                    }
+                });
+                handles.push(handle);
+            }
+
+            while let Some(join) = handles.next().await {
+                join?;
+            }
+
+            Err::<(), _>(Error::EarlyReturn)
+        };
+
+        // let my_recv = async {
+        //     let mut recv = self.my_receiver.into_stream();
+
+        //     Err::<(), _>(Error::EarlyReturn)
+        // };
+
+        my_serve.await?;
 
         Err(Error::EarlyReturn)
     }
+    async fn write_socket_forever(
+        receiver: Arc<flume::Receiver<Message>>,
+        stream: &UnixStream,
+    ) -> Result<(), Error> {
+        loop {
+            let message = receiver.recv_async().await?;
+            let message_serialized = match message.into_json() {
+                Ok(m) => m,
+                Err(e) => {
+                    tracing::warn!("Failed to serialize message: {e}");
+                    continue;
+                }
+            };
+            stream.writable().await?;
+            stream.try_write(message_serialized.as_bytes())?;
+        }
+    }
+    // /// Receive messages from [`InterfaceStub`]s and send them to the channel.
+    // pub async fn receive_messages(&self)
     async fn read_socket_forever(
-        sender: Arc<watch::Sender<Message>>,
-        stream: UnixStream,
+        sender: Arc<flume::Sender<Message>>,
+        stream: &UnixStream,
     ) -> Result<(), Error> {
         let mut partial_line = String::new();
 
@@ -126,24 +172,12 @@ impl Interface {
                         continue;
                     }
 
-                    sender.send_if_modified(|old| {
-                        if *old != msg {
-                            let _ = std::mem::replace(old, msg);
-                            return true;
-                        }
-
-                        false
-                    });
+                    sender.send(msg)?;
 
                     partial_line.clear();
                 }
             }
         }
-    }
-    /// Send a message to the socket
-    pub fn send_message(&self, message: Message) -> Result<(), Error> {
-        self.sender.send(message)?;
-        Ok(())
     }
 }
 impl Drop for Interface {
@@ -184,5 +218,21 @@ impl InterfaceState {
             *self = Self::Server;
         }
         Err(Error::InvalidState(*self))
+    }
+}
+
+/// A stub, meant to facilitate listening to an interface.
+///
+/// Uses `Arc` internally so it is cheap to clone.
+#[derive(Debug, Clone)]
+pub struct InterfaceStub {
+    pub sender: Arc<flume::Sender<Message>>,
+    pub receiver: Arc<flume::Receiver<Message>>,
+}
+impl InterfaceStub {
+    /// Send a messsage to the internal sender.
+    #[inline]
+    pub fn send(&self, message: Message) -> Result<(), flume::SendError<Message>> {
+        self.sender.send(message)
     }
 }
