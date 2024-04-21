@@ -1,27 +1,29 @@
+use std::path::Path;
+
 use crate::imports::*;
 
+/// The interface for a socket. This is the primary singleton for the crate.
 #[derive(Debug)]
 pub struct Interface {
     socket_path: PathBuf,
     state: InterfaceState,
     my_receiver: Arc<flume::Receiver<Message>>,
     sub_sender: Arc<flume::Sender<Message>>,
-    socket: UnixListener,
 }
 impl Interface {
     /// Create a new [`Server`] to primarily write to the socket
     #[instrument(level = "debug", skip_all)]
-    pub async fn new() -> Result<(Self, InterfaceStub), Error> {
+    pub fn new() -> Result<(Self, InterfaceStub), Error> {
         let socket_path = crate::get_socket_path()?;
 
         let state = if socket_path.exists() {
-            InterfaceState::Client
+            InterfaceState::Potential(InterfaceType::Client)
         } else {
-            InterfaceState::PotentialServer
+            InterfaceState::Potential(InterfaceType::Server)
         };
 
         // let stream = UnixStream::connect(&socket_path).await?;
-        let socket = UnixListener::bind(&socket_path)?;
+        // let socket = UnixListener::bind(&socket_path)?;
 
         let (s, my_receiver) = flume::unbounded();
         let (sub_sender, sr) = flume::unbounded();
@@ -31,7 +33,6 @@ impl Interface {
             state,
             my_receiver: Arc::new(my_receiver),
             sub_sender: Arc::new(sub_sender),
-            socket,
         };
 
         let stub = InterfaceStub {
@@ -41,59 +42,68 @@ impl Interface {
 
         Ok((me, stub))
     }
+    /// Act as a socket interface, sending and receiving messages -- like a client.
+    ///
+    /// There can be multiple clients, but they all get the same messages -- try not to make multiple in your crate!
+    ///
+    /// Consider spawning this on another async task, or joining this with another future that runs indefinitely.
+    pub async fn interface(&mut self) -> Result<(), Error> {
+        self.state.try_as(InterfaceType::Client)?;
+
+        let stream = UnixStream::connect(&self.socket_path).await?;
+
+        let owned_sender = Arc::clone(&self.sub_sender);
+        let owned_receiver = Arc::clone(&self.my_receiver);
+
+        tokio::try_join!(
+            Self::read_socket_forever(owned_sender, &stream),
+            Self::write_socket_forever(owned_receiver, &stream)
+        )?;
+
+        Err(Error::EarlyReturn)
+    }
     /// Act as a server for the socket.
     ///
     /// There can be only one server accepting connections, this will return an error if there is already one.
     ///
     /// Consider spawning this on another async task, or joining this with another future that runs indefinitely.
     pub async fn server(&mut self) -> Result<(), Error> {
-        self.state.try_server()?;
+        self.state.try_as(InterfaceType::Server)?;
 
-        let my_serve = async {
-            let mut handles = futures_util::stream::FuturesUnordered::new();
+        let socket = UnixListener::bind(&self.socket_path)?;
+        let mut handles = futures_util::stream::FuturesUnordered::new();
 
-            loop {
-                let (stream, address) = match self.socket.accept().await {
-                    Ok(s) => s,
-                    Err(e) => {
-                        warn!("Halogen server could not accept connection: {e}");
-                        break;
-                    }
-                };
-                debug!(
-                    "Halogen server received connection from address: {:?}",
-                    address.as_pathname()
+        loop {
+            let (stream, address) = match socket.accept().await {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!("Halogen server could not accept connection: {e}, stopping listener");
+                    break;
+                }
+            };
+            debug!(
+                "Halogen server received connection from address: {:?}",
+                address.as_pathname()
+            );
+            let owned_sender = Arc::clone(&self.sub_sender);
+            let owned_receiver = Arc::clone(&self.my_receiver);
+            let handle = tokio::spawn(async move {
+                let res = tokio::try_join!(
+                    Self::read_socket_forever(owned_sender, &stream),
+                    Self::write_socket_forever(owned_receiver, &stream)
                 );
-                let owned_sender = Arc::clone(&self.sub_sender);
-                let owned_receiver = Arc::clone(&self.my_receiver);
-                let handle = tokio::spawn(async move {
-                    let res = tokio::try_join!(
-                        Self::read_socket_forever(owned_sender, &stream),
-                        Self::write_socket_forever(owned_receiver, &stream)
-                    );
 
-                    match res {
-                        Ok(((), ())) => unreachable!(),
-                        Err(e) => error!("{e}"),
-                    }
-                });
-                handles.push(handle);
-            }
+                match res {
+                    Ok(((), ())) => unreachable!(),
+                    Err(e) => error!("{e}"),
+                }
+            });
+            handles.push(handle);
+        }
 
-            while let Some(join) = handles.next().await {
-                join?;
-            }
-
-            Err::<(), _>(Error::EarlyReturn)
-        };
-
-        // let my_recv = async {
-        //     let mut recv = self.my_receiver.into_stream();
-
-        //     Err::<(), _>(Error::EarlyReturn)
-        // };
-
-        my_serve.await?;
+        while let Some(join) = handles.next().await {
+            join?;
+        }
 
         Err(Error::EarlyReturn)
     }
@@ -115,9 +125,7 @@ impl Interface {
             stream.try_write(message_serialized.as_bytes())?;
         }
     }
-    // /// Receive messages from [`InterfaceStub`]s and send them to the channel.
-    // pub async fn receive_messages(&self)
-    #[instrument(level = "debug", skip_all)]
+    // #[instrument(level = "debug", skip_all)]
     async fn read_socket_forever(
         sender: Arc<flume::Sender<Message>>,
         stream: &UnixStream,
@@ -171,9 +179,8 @@ impl Interface {
             }
         }
     }
-}
-impl Drop for Interface {
-    fn drop(&mut self) {
+    /// remove socket when this is done
+    pub fn drop_file(&mut self) {
         match self.state {
             InterfaceState::Client => {}
             InterfaceState::PotentialClient | InterfaceState::PotentialServer => {}
@@ -192,24 +199,41 @@ impl Drop for Interface {
         }
     }
 }
+impl Drop for Interface {
+    fn drop(&mut self) {
+        self.drop_file()
+    }
+}
 
+/// The type of interface this is
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum InterfaceType {
+    Client,
+    Server,
+}
 /// Determines what the interface can be and do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InterfaceState {
-    Client,
-    Server,
-    /// The socket path doesn't exist yet
-    PotentialServer,
-    PotentialClient,
+    Potential(InterfaceType),
+    Current(InterfaceType),
 }
 impl InterfaceState {
-    /// Try to set this to a server. Used internally.
-    #[inline]
-    fn try_server(&mut self) -> Result<(), Error> {
-        if *self == InterfaceState::PotentialServer {
-            *self = Self::Server;
-            return Ok(());
+    /// Get the interface type. Both have one, so this will not fail.
+    pub fn unwrap_type(&self) -> InterfaceType {
+        *match self {
+            Self::Current(t) => t,
+            Self::Potential(t) => t,
         }
+    }
+    #[inline]
+    fn try_as(&mut self, try_type: InterfaceType) -> Result<(), Error> {
+        if let Self::Potential(i) = *self {
+            if i == try_type {
+                *self = Self::Current(i);
+                return Ok(());
+            }
+        }
+
         Err(Error::InvalidState(*self))
     }
 }
