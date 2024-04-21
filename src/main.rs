@@ -8,11 +8,7 @@ fn main() -> prelude::R<()> {
     let uname = nix::sys::utsname::uname()?;
     prelude::debug!("Running kernel {}", uname.release().to_string_lossy());
 
-    let f = async move {
-        let server = halogen::server::Server::new().await?;
-
-        Ok::<_, prelude::Report>(())
-    };
+    let f = async move { Ok::<_, prelude::Report>(()) };
 
     Ok(())
 }
