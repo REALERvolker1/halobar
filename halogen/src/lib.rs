@@ -57,6 +57,8 @@ pub enum Error {
     EarlyReturn,
     /// An error sending data through a channel
     SendError,
+    /// An error joining a task
+    JoinError(tokio::task::JoinError),
 }
 impl std::error::Error for Error {}
 impl std::fmt::Display for Error {
@@ -67,6 +69,7 @@ impl std::fmt::Display for Error {
             Self::Json(e) => e.fmt(f),
             Self::EarlyReturn => "Future returned too early".fmt(f),
             Self::SendError => "Error sending message through channel".fmt(f),
+            Self::JoinError(e) => e.fmt(f),
         }
     }
 }
@@ -78,6 +81,11 @@ impl From<std::io::Error> for Error {
 impl From<JsonError> for Error {
     fn from(value: JsonError) -> Self {
         Self::Json(value)
+    }
+}
+impl From<tokio::task::JoinError> for Error {
+    fn from(value: tokio::task::JoinError) -> Self {
+        Self::JoinError(value)
     }
 }
 macro_rules! senderr {

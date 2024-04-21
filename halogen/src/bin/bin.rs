@@ -13,7 +13,7 @@ fn main() -> Result<(), halogen::Error> {
     logger.init();
 
     let future = async move {
-        let mut server = halogen::interface::Server::new().await?;
+        let server = halogen::interface::Server::new().await?;
 
         let server_handle = tokio::spawn(async move { server.await_connections().await });
 

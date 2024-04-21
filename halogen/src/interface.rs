@@ -35,15 +35,30 @@ impl Server {
     ///
     /// Consider spawning this on another async task, or joining this with another future that runs indefinitely.
     pub async fn await_connections(&self) -> Result<(), Error> {
+        let mut handles = futures_util::stream::FuturesUnordered::new();
         loop {
-            let (stream, address) = self.socket.accept().await?;
+            let (stream, address) = match self.socket.accept().await {
+                Ok(s) => s,
+                Err(e) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!("Halogen server could not accept connection: {e}");
+                    break;
+                }
+            };
+
             #[cfg(feature = "tracing")]
             tracing::debug!(
                 "Halogen server received connection from address: {:?}",
                 address.as_pathname()
             );
             let owned_sender = Arc::clone(&self.sub_sender);
-            tokio::spawn(async move { Self::read_socket_forever(owned_sender, stream).await });
+            let handle =
+                tokio::spawn(async move { Self::read_socket_forever(owned_sender, stream).await });
+            handles.push(handle);
+        }
+
+        while let Some(join) = handles.next().await {
+            join??;
         }
 
         Err(Error::EarlyReturn)
