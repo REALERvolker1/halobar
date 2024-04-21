@@ -8,7 +8,7 @@ mod imports;
 
 pub mod server;
 
-use std::{env, path::PathBuf};
+use std::{env, path::PathBuf, task::Poll};
 
 /// Override the path to the socket.
 pub const SOCKET_OVERRIDE_VARIABLE: &str = "HALOGEN_SOCK";
@@ -92,3 +92,62 @@ macro_rules! senderr {
     };
 }
 senderr![mpsc, broadcast, watch];
+
+/// A set of futures that poll but also let you insert
+#[derive(Debug)]
+pub struct BruhSet<Fut: std::future::Future<Output = T>, T> {
+    cursor: usize,
+    futures: Vec<Fut>,
+    insert_next: Option<Fut>,
+}
+impl<Fut: std::future::Future<Output = T>, T> Default for BruhSet<Fut, T> {
+    fn default() -> Self {
+        Self {
+            cursor: 0,
+            futures: Vec::new(),
+            insert_next: None,
+        }
+    }
+}
+impl<Fut: std::future::Future<Output = T>, T> BruhSet<Fut, T> {
+    /// Create a new empty instance
+    #[inline]
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+impl<Fut: std::future::Future<Output = T>, T> futures_util::Stream for BruhSet<Fut, T> {
+    type Item = T;
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        if self.futures.is_empty() {
+            return Poll::Ready(None);
+        }
+
+        if self.cursor > self.futures.len() {
+            self.cursor = self.futures.len();
+        }
+
+        let next = self.futures.get(self.cursor).unwrap();
+        self.cursor = self.cursor.wrapping_add(1);
+        next
+    }
+}
+// impl<Fut: std::future::IntoFuture<Output = T>, T> std::future::Future for BruhSet<Fut, T> {
+//     type Output = T;
+//     fn poll(
+//         self: std::pin::Pin<&mut Self>,
+//         cx: &mut std::task::Context<'_>,
+//     ) -> std::task::Poll<Self::Output> {
+//         if self.futures.is_empty() {
+//             return std::task::Poll::
+//         }
+//         if self.cursor > self.futures.len() {
+//             self.cursor = 0;
+//         }
+
+//         self.futures.get(index)
+//     }
+// }

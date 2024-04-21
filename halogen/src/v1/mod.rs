@@ -111,9 +111,11 @@ impl Variant {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Message {
     /// The API version that created this Message
-    pub version: u8,
+    version: u8,
     /// The current status. Signifies the current state of things.
     pub status: Status,
+    /// The type of sender that sent this message
+    sender_type: SenderType,
     /// The name of this message
     pub name: String,
     /// Inner data payload
@@ -121,29 +123,62 @@ pub struct Message {
 }
 impl Default for Message {
     fn default() -> Self {
-        Self::new(Status::default(), String::new(), HashMap::new())
+        Self::new(
+            Status::default(),
+            SenderType::All,
+            String::new(),
+            HashMap::new(),
+        )
     }
 }
 impl Message {
     // pub fn new(key: &str)
     /// Deserialize a message from raw json
-    #[cfg_attr(feature = "tracing", ::tracing::instrument(level = "debug", skip_all))]
+    #[cfg_attr(feature = "tracing", ::tracing::instrument(level = "trace", skip_all))]
     pub fn try_from_raw(json: &str) -> Result<Self, crate::imports::Error> {
         crate::imports::from_string(json)
     }
-    pub fn new<S: Into<String>>(status: Status, name: S, data: HashMap<String, Variant>) -> Self {
+    /// Create a new message directly. Not recommended to use -- instead, use the helper impls provided by dedicated interfaces.
+    #[cfg_attr(feature = "tracing", ::tracing::instrument(level = "debug", skip_all))]
+    pub fn new<S: Into<String>>(
+        status: Status,
+        sender_type: SenderType,
+        name: S,
+        data: HashMap<String, Variant>,
+    ) -> Self {
         Self {
             version: 1,
             status,
+            sender_type,
             name: name.into(),
             data,
         }
     }
     /// Serialize this message into json fit to send to the socket.
+    #[cfg_attr(feature = "tracing", ::tracing::instrument(level = "trace", skip_all))]
     pub fn into_json(&self) -> Result<String, Error> {
         let out = to_string(self)?;
         Ok(out)
     }
+    #[inline]
+    pub const fn version(&self) -> u8 {
+        self.version
+    }
+    #[inline]
+    pub const fn sender_type(&self) -> SenderType {
+        self.sender_type
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum SenderType {
+    /// Messages only interpreted by the server
+    Server,
+    /// Messages that are only interpreted by the client
+    Client,
+    /// Messages that are sent to everyone everywhere
+    #[default]
+    All,
 }
 
 /// A general-purpose status

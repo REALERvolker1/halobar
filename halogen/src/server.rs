@@ -1,4 +1,6 @@
-use std::collections::VecDeque;
+use std::{cell::RefCell, collections::VecDeque, rc::Rc};
+
+use futures_util::StreamExt;
 
 use crate::imports::*;
 
@@ -9,7 +11,6 @@ pub struct Server {
     sub_sender: watch::Sender<Message>,
     pub receiver: Arc<watch::Receiver<Message>>,
     socket: UnixListener,
-    buffer: Vec<u8>,
 }
 impl Server {
     /// Create a new [`Server`] to primarily write to the socket
@@ -28,90 +29,106 @@ impl Server {
             sub_sender,
             receiver: Arc::new(sr),
             socket,
-            buffer: Vec::new(),
         })
     }
     /// Read/write to the stream indefinitely. This should not return.
     ///
     /// Consider spawning this on another async task, or joining this with another future that runs indefinitely.
-    // #[cfg_attr(feature = "tracing", ::tracing::instrument(level = "debug", skip_all))]
-    pub async fn read_forever(&mut self) -> Result<(), Error> {
-        let (stream, address) = self.socket.accept().await?;
-        #[cfg(feature = "tracing")]
-        tracing::debug!(
-            "Halogen server received connection from address: {:?}",
-            address.as_pathname()
-        );
+    pub async fn read_forever(&self) -> Result<(), Error> {
+        // let (internal_sender, internal_receiver) = mpsc::channel(1);
+        // let local_handle = tokio::task::spawn_local(async {
+        //     let mut futes = futures_util::stream::FuturesUnordered::new();
 
+        //     while let Some(f) = internal_receiver.recv().await {
+        //         futes.push(f)
+        //     }
+        //     Ok::<_, Error>(())
+        // });
+        let mut futures = Rc::new(RefCell::new(futures_util::stream::FuturesUnordered::new()));
+
+        let futures_stream = async {
+            
+            Ok::<_, Error>(())
+        };
+        let futures_adder = async {
+            loop {
+                let (stream, address) = self.socket.accept().await?;
+                #[cfg(feature = "tracing")]
+                tracing::debug!(
+                    "Halogen server received connection from address: {:?}",
+                    address.as_pathname()
+                );
+                futures.push(self.read_socket_forever(stream))
+            }
+            Ok::<_, Error>(())
+        };
+
+        tokio::try_join!(futures_stream, futures_adder);
+
+        Err(Error::EarlyReturn)
+    }
+    async fn read_socket_forever(&self, stream: UnixStream) -> Result<(), Error> {
         let mut partial_line = String::new();
-        // clear partial line when it is done
-        let mut clear_line = false;
 
         loop {
-            if clear_line {
-                clear_line = false;
-                partial_line.clear();
-            }
-            let mut current_data = Vec::with_capacity(2048);
-
             stream.readable().await?;
 
             loop {
                 let mut buffer = [0; 2048];
                 let read = stream.try_read(&mut buffer)?;
-                current_data.copy_from_slice(&buffer);
 
                 if read == 0 {
                     break;
                 }
-            }
 
-            let decoded = match std::str::from_utf8(current_data.as_slice()) {
-                Ok(s) => s,
-                Err(e) => {
-                    #[cfg(feature = "tracing")]
-                    tracing::warn!("Halogen server decoding error: {e}");
-                    continue;
+                let decoded = match std::str::from_utf8(&buffer) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        #[cfg(feature = "tracing")]
+                        tracing::warn!("Halogen server decoding error: {e}");
+                        continue;
+                    }
+                };
+
+                for char in decoded.chars() {
+                    if char != '\n' {
+                        partial_line.push(char);
+                        continue;
+                    }
+
+                    // TODO: Test if futures ordered is good for this
+                    let msg = match Message::try_from_raw(&partial_line) {
+                        Ok(m) => m,
+                        Err(e) => {
+                            #[cfg(feature = "tracing")]
+                            tracing::warn!("Halogen server decoding error: {e}");
+                            // it isn't the end of the world, it's just one message
+                            return Ok(());
+                        }
+                    };
+
+                    // A server sent the message, ignore
+                    if msg.sender_type() == crate::SenderType::Server {
+                        continue;
+                    }
+
+                    self.sub_sender.send_if_modified(|old| {
+                        if *old != msg {
+                            let _ = std::mem::replace(old, msg);
+                            return true;
+                        }
+
+                        false
+                    });
+
+                    partial_line.clear();
                 }
-            };
-
-            let mut lines = decoded.lines().collect::<VecDeque<_>>();
-            if !partial_line.is_empty() {
-                // safety: I already broke the loop if it was empty, this should return one.
-                let other_part = lines.pop_front().expect("Halogen server expected a partial line, received none! Please file a bug report!");
-                partial_line.push_str(other_part);
-                lines.push_front(partial_line.as_str());
-
-                clear_line = true;
-            } else if !decoded.ends_with('\n') {
-                // it is incomplete, wait for more data to come through
-                // safety: I already broke the loop if it was empty, this should return one.
-                partial_line.push_str(lines.pop_back().expect("Halogen server expected a partial line, received none! Please file a bug report!"))
-            }
-
-            for line in lines {
-                send_helper(line, &self.sub_sender).await?;
             }
         }
-
-        // Err(Error::EarlyReturn)
     }
+    /// Send a message to the socket
     pub fn send_message(&self, message: Message) -> Result<(), Error> {
         self.sender.send(message)?;
         Ok(())
     }
-}
-
-/// An internal helper function for the reading thingy
-async fn send_helper(line: &str, sender: &watch::Sender<Message>) -> Result<(), Error> {
-    let msg = Message::try_from_raw(line)?;
-    sender.send_if_modified(|old| {
-        if *old != msg {
-            let _ = std::mem::replace(old, msg);
-            return true;
-        }
-
-        false
-    });
-    Ok(())
 }
