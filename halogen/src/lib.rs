@@ -4,7 +4,7 @@ pub mod v1;
 pub use v1::*;
 
 /// An internal library for stuff imported from other crates
-pub(crate) mod imports;
+mod imports;
 
 pub mod server;
 
@@ -53,6 +53,8 @@ pub enum Error {
     InvalidSocketPath(PathBuf),
     /// An error that occured when parsing json
     Json(JsonError),
+    /// An error that is returned from futures that ended too early
+    EarlyReturn,
 }
 impl std::error::Error for Error {}
 impl std::fmt::Display for Error {
@@ -61,6 +63,7 @@ impl std::fmt::Display for Error {
             Self::Io(e) => e.fmt(f),
             Self::InvalidSocketPath(p) => write!(f, "Invalid socket path: {}", p.display()),
             Self::Json(e) => e.fmt(f),
+            Self::EarlyReturn => "Future returned too early".fmt(f),
         }
     }
 }

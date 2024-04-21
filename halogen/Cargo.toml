@@ -20,7 +20,17 @@ monoio = { version = "0.2.3", features = [
     "zero-copy",
     "bytes",
     "iouring",
+    "flume",
+    "once_cell",
 ], optional = true, default-features = false }
+tokio = { version = "1.37", features = [
+    "macros",
+    "io-std",
+    "socket2",
+    "sync",
+    "test-util",
+    "net",
+], optional = true }
 flume = { version = "0.11", default-features = false, features = [
     "async",
     "nanorand",
@@ -28,15 +38,21 @@ flume = { version = "0.11", default-features = false, features = [
 tracing = { version = "0.1", features = ["async-await"], optional = true }
 serde = { version = "1", features = ["derive"] }
 once_cell = { version = "1.19" }
-futures-util = "0.3"
-serde_json = { version = "1.0.116", optional = true }
-simd-json = { version = "0.13.10", optional = true, features = ["known-key"] }
+futures-util = { version = "0.3", default-features = false, features = ["async-await", "std"] }
+serde_json = { version = "1.0", optional = true }
+simd-json = { version = "0.13", optional = true, features = ["known-key"] }
+async-net = { version = "2.0", optional = true }
+async-io = { version = "2.3", optional = true }
 
 [features]
-default = ["tracing", "monoio", "parking_lot", "flume", "serde_json"]
-tracing = ["dep:tracing", "monoio?/tracing"]
-monoio = ["dep:monoio"]
-parking_lot = ["once_cell/parking_lot"]
-flume = ["dep:flume", "monoio?/flume"]
+default = ["tracing", "monoio", "simd-json"]
+
+tracing = ["dep:tracing", "monoio?/tracing", "tokio?/tracing"]
+parking_lot = ["once_cell/parking_lot", "tokio?/parking_lot"]
+
+monoio = ["dep:monoio", "dep:flume"]
+tokio = ["dep:tokio"]
+
 serde_json = ["dep:serde_json"]
 simd-json = ["dep:simd-json"]
+async-lite = ["dep:async-net", "dep:async-io"]

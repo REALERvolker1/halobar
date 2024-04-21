@@ -90,18 +90,6 @@ tokio = { version = "1.37.0", features = [
     "net",
 ] }
 
-monoio = { version = "0.2.3", features = [
-    "zero-copy",
-    "flume",
-    "once_cell",
-    "signal",
-    "threadpool",
-    "tracing",
-] }
-flume = { version = "0.11.0", default-features = false, features = [
-    "async",
-    "nanorand",
-] }
 
 halobar_fmt = { path = "halobar_fmt" }
 halobar_core = { path = "halobar_core" }
@@ -130,6 +118,15 @@ halobar_fmt = { workspace = true }
 halobar_core = { workspace = true }
 halobar_config = { workspace = true }
 halogen = { workspace = true }
+
+monoio = { version = "0.2.3", features = [
+    "zero-copy",
+    "flume",
+    "once_cell",
+    "signal",
+    "threadpool",
+    "tracing",
+] }
 
 color-eyre = { version = "0.6.3", features = [
     "capture-spantrace",
