@@ -8,7 +8,7 @@ mod imports;
 
 pub mod interface;
 
-use std::{env, path::PathBuf, task::Poll};
+use std::{env, path::PathBuf};
 
 /// Override the path to the socket.
 pub const SOCKET_OVERRIDE_VARIABLE: &str = "HALOGEN_SOCK";

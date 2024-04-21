@@ -14,44 +14,30 @@ authors.workspace = true
 name = "halogen"
 
 [dependencies]
-ahash = { version = "0.8", features = [
-    "serde",
-    "no-rng",
-    "std",
-], default-features = false }
-tokio = { version = "1.37", features = [
-    "macros",
-    "io-std",
-    "socket2",
-    "sync",
-    "test-util",
-    "net",
-    "tracing",
-] }
+ahash = { workspace = true }
+tokio = { workspace = true }
 
-tracing = { version = "0.1", features = ["async-await"] }
-serde = { version = "1", features = ["derive"] }
-once_cell = { version = "1.19" }
-futures-util = { version = "0.3", default-features = false, features = [
-    "async-await",
-    "std",
-] }
+tracing = { workspace = true }
+serde = { workspace = true }
+# once_cell = { workspace = true, optional = true }
+color-eyre = { workspace = true, optional = true }
+tracing-error = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, optional = true }
+tracing-appender = { workspace = true, optional = true }
+flume = { workspace = true }
+futures-util = { workspace = true }
 serde_json = { version = "1.0", optional = true }
 simd-json = { version = "0.13", optional = true, features = ["known-key"] }
-tracing-subscriber = { version = "0.3.18", features = [
-    "once_cell",
-], optional = true }
-flume = { version = "0.11.0", default-features = false, features = ["async"] }
 
 [features]
 default = ["simd-json", "bin"]
 
-bin = ["simd-json", "parking_lot", "dep:tracing-subscriber"]
-
-parking_lot = [
-    "once_cell/parking_lot",
-    "tokio/parking_lot",
-    "tracing-subscriber?/parking_lot",
+bin = [
+    "simd-json",
+    "dep:tracing-subscriber",
+    "dep:tracing-error",
+    "dep:tracing-appender",
+    "dep:color-eyre",
 ]
 
 serde_json = ["dep:serde_json"]

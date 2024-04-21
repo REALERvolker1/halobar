@@ -89,6 +89,19 @@ tokio = { version = "1.37.0", features = [
     "test-util",
     "net",
 ] }
+color-eyre = { version = "0.6.3", features = [
+    "capture-spantrace",
+    "track-caller",
+], default-features = false }
+tracing-error = "0.2.0"
+tracing-subscriber = { version = "0.3.18", features = [
+    "parking_lot",
+    "once_cell",
+] }
+tracing-appender = { version = "0.2.3", features = ["parking_lot"] }
+uuid = { version = "1.8.0", features = ["v4", "fast-rng", "serde", "zerocopy"] }
+nix = { version = "0.28.0", features = ["fs", "user", "hostname"] }
+flume = { version = "0.11.0", default-features = false, features = ["async"] }
 
 
 halobar_fmt = { path = "halobar_fmt" }
@@ -118,27 +131,18 @@ halobar_fmt = { workspace = true }
 halobar_core = { workspace = true }
 halobar_config = { workspace = true }
 halogen = { workspace = true }
+color-eyre = { workspace = true }
+tracing-error = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-appender = { workspace = true }
+uuid = { workspace = true }
+nix = { workspace = true }
 
-monoio = { version = "0.2.3", features = [
-    "zero-copy",
-    "flume",
-    "once_cell",
-    "signal",
-    "threadpool",
-    "tracing",
-] }
-
-color-eyre = { version = "0.6.3", features = [
-    "capture-spantrace",
-    "track-caller",
-], default-features = false }
-tracing-error = "0.2.0"
-tracing-subscriber = { version = "0.3.18", features = [
-    "parking_lot",
-    "once_cell",
-] }
-uuid = { version = "1.8.0", features = ["v4", "fast-rng", "serde", "zerocopy"] }
-nix = { version = "0.28.0", features = ["fs", "user", "hostname"] }
-
-tracing-appender = { version = "0.2.3", features = ["parking_lot"] }
-io-uring = "0.6.3"
+# monoio = { version = "0.2.3", features = [
+#     "zero-copy",
+#     "flume",
+#     "once_cell",
+#     "signal",
+#     "threadpool",
+#     "tracing",
+# ] }

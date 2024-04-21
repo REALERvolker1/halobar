@@ -179,22 +179,18 @@ impl Interface {
             }
         }
     }
-    /// remove socket when this is done
+    /// remove socket file when this is done. Essential for servers
     pub fn drop_file(&mut self) {
-        match self.state {
-            InterfaceState::Client => {}
-            InterfaceState::PotentialClient | InterfaceState::PotentialServer => {}
-            InterfaceState::Server => {
-                if self.socket_path.is_file() {
-                    if let Err(e) = std::fs::remove_file(&self.socket_path) {
-                        error!(
-                            "Failed to remove socket path: {e} at {}",
-                            self.socket_path.display()
-                        );
-                    }
-                } else {
-                    debug!("Removing socket path: {}", self.socket_path.display());
+        if self.state == InterfaceState::Current(InterfaceType::Server) {
+            if self.socket_path.is_file() {
+                if let Err(e) = std::fs::remove_file(&self.socket_path) {
+                    error!(
+                        "Failed to remove socket path: {e} at {}",
+                        self.socket_path.display()
+                    );
                 }
+            } else {
+                debug!("Removing socket path: {}", self.socket_path.display());
             }
         }
     }
