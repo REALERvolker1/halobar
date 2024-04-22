@@ -133,10 +133,12 @@ impl Default for Message {
 }
 impl Message {
     // pub fn new(key: &str)
-    /// Deserialize a message from raw json
+    /// Deserialize a message from raw json bytes.
+    ///
+    /// This requires a mutable slice because the simd-json crate will mutate the slice and I want this to be zerocopy.
     #[instrument(level = "trace", skip_all)]
-    pub fn try_from_raw(json: &str) -> Result<Self, crate::imports::Error> {
-        crate::imports::from_string(json)
+    pub fn try_from_raw(json: &mut [u8]) -> Result<Self, crate::imports::Error> {
+        crate::imports::from_bytes(json)
     }
     /// Create a new message directly. Not recommended to use -- instead, use the helper impls provided by dedicated interfaces.
     #[instrument(level = "debug", skip_all)]
@@ -229,7 +231,7 @@ impl std::fmt::Display for Status {
 mod tests {
     use super::*;
 
-    use crate::imports::{from_string, to_string};
+    use crate::imports::{from_bytes, to_string};
 
     #[test]
     fn deserialize_variants() {
@@ -261,9 +263,11 @@ mod tests {
 
         variants.insert("map".to_owned(), Variant::Map(map));
 
-        let json = to_string(&variants).unwrap();
+        let mut json = to_string(&variants).unwrap();
 
-        let from_json: HashMap<String, Variant> = from_string(&json).unwrap();
+        // safety: I know this is UTF-8
+        let json_bytes = unsafe { json.as_bytes_mut() };
+        let from_json: HashMap<String, Variant> = from_bytes(json_bytes).unwrap();
 
         assert_eq!(from_json, variants);
     }

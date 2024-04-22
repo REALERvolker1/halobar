@@ -150,45 +150,48 @@ impl Interface {
             stream.try_write(message_serialized.as_bytes())?;
         }
     }
+
     // #[instrument(level = "debug", skip_all)]
     async fn read_socket_forever(
         sender: Arc<flume::Sender<Message>>,
         stream: &UnixStream,
     ) -> Result<(), Error> {
-        let mut partial_line = String::new();
+        const BUFFER_SIZE: usize = 2048;
+        let mut line_buffer = Vec::with_capacity(BUFFER_SIZE);
 
         loop {
             stream.readable().await?;
+            let mut read_buffer = [0; BUFFER_SIZE];
 
             loop {
-                let mut buffer = [0; 2048];
-                let read = stream.try_read(&mut buffer)?;
+                let read = stream.try_read(&mut read_buffer)?;
 
                 if read == 0 {
                     break;
                 }
 
-                let decoded = match std::str::from_utf8(&buffer) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        warn!("Halogen server decoding error: {e}");
-                        continue;
-                    }
-                };
+                // let decoded = match std::str::from_utf8(&read_buffer) {
+                //     Ok(s) => s,
+                //     Err(e) => {
+                //         warn!("Halogen server decoding error: {e}");
+                //         continue;
+                //     }
+                // };
 
-                for char in decoded.chars() {
-                    if char != '\n' {
-                        partial_line.push(char);
+                for byte in read_buffer {
+                    // nullbyte-delimited
+                    if byte != 0 {
+                        line_buffer.push(byte);
                         continue;
                     }
 
                     // TODO: Test if futures ordered is good for this
-                    let msg = match Message::try_from_raw(&partial_line) {
+                    let msg = match Message::try_from_raw(line_buffer.as_mut_slice()) {
                         Ok(m) => m,
                         Err(e) => {
                             warn!("Halogen server decoding error: {e}");
                             // it isn't the end of the world, it's just one message
-                            return Ok(());
+                            continue;
                         }
                     };
 
@@ -199,7 +202,8 @@ impl Interface {
 
                     sender.send(msg)?;
 
-                    partial_line.clear();
+                    // This only runs upon receiving a nullbyte, remember!
+                    line_buffer.clear();
                 }
             }
         }

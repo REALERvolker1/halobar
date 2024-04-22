@@ -32,8 +32,7 @@ pub fn from_string<D: DeserializeOwned>(input_string: &str) -> Result<D, Error> 
 
 #[cfg(feature = "simd-json")]
 #[inline]
-pub fn from_string<D: DeserializeOwned>(input_string: &str) -> Result<D, Error> {
-    let mut owned_string = input_string.to_owned();
-    let out = unsafe { simd_json::from_str(owned_string.as_mut_str()) }?;
+pub fn from_bytes<D: DeserializeOwned>(input: &mut [u8]) -> Result<D, Error> {
+    let out = unsafe { simd_json::from_slice(input) }?;
     Ok(out)
 }
