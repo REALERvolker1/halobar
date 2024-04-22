@@ -3,13 +3,21 @@
 fn main() {}
 
 #[cfg(feature = "bin")]
-fn main() -> Result<(), halogen::Error> {
+pub mod halogen_stuff;
+
+#[cfg(feature = "bin")]
+fn main() -> halogen_stuff::R<()> {
     use std::io::IsTerminal;
+
+    use tracing_subscriber::fmt::format::FmtSpan;
 
     let logger = tracing_subscriber::FmtSubscriber::builder()
         .with_max_level(tracing::Level::TRACE)
         .pretty()
         .with_ansi(std::io::stdout().is_terminal())
+        .with_target(true)
+        .with_thread_ids(true)
+        .with_span_events(FmtSpan::ACTIVE)
         .with_writer(|| std::io::stdout());
     logger.init();
 
