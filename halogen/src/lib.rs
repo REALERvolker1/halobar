@@ -10,33 +10,49 @@ pub mod interface;
 
 use std::{env, path::PathBuf};
 
-/// Override the path to the socket.
-pub const SOCKET_OVERRIDE_VARIABLE: &str = "HALOGEN_SOCK";
-
-/// Try to get a valid socket path location
+/// Try to get a valid socket path location.
+///
+///
+/// First tries the environment variable `${HALOGEN_SOCK}`, then tries
+/// `${XDG_RUNTIME_DIR}/halogen/halogen${XDG_SESSION_ID}.sock`
 pub fn get_socket_path() -> Result<PathBuf, Error> {
-    if let Some(env_path) = env::var_os(SOCKET_OVERRIDE_VARIABLE) {
+    if let Some(env_path) = env::var_os("HALOGEN_SOCK") {
         let env_path = PathBuf::from(env_path);
-        return if env_path.exists() {
-            Ok(env_path)
-        } else {
-            Err(Error::InvalidSocketPath(env_path))
-        };
+        tracing::debug!(
+            "Loading path from environment variable HALOGEN_SOCK: {}",
+            env_path.display()
+        );
+        return Ok(env_path);
     }
+    tracing::trace!("Environment variable HALOGEN_SOCK was undefined");
 
-    let mut runtime_dir = match env::var_os("XDG_RUNTIME_DIR") {
+    let mut path = match env::var_os("XDG_RUNTIME_DIR") {
         Some(p) => PathBuf::from(p),
-        None => return Err(Error::InvalidSocketPath(PathBuf::new())),
+        None => return Err(Error::InvalidEnviron("XDG_RUNTIME_DIR")),
     };
 
-    let path_metadata = runtime_dir.metadata()?;
+    let path_metadata = path.metadata()?;
     if !path_metadata.is_dir() || path_metadata.permissions().readonly() {
-        return Err(Error::InvalidSocketPath(runtime_dir));
+        return Err(Error::InvalidSocketPath(path));
+    }
+    path.push("halogen");
+
+    let mut socket_name = "halosock".to_owned();
+
+    let session_id =
+        env::var("XDG_SESSION_ID").map_err(|_| Error::InvalidEnviron("XDG_SESSION_ID"))?;
+
+    // make sure the path exists
+    if !path.is_dir() {
+        std::fs::create_dir_all(&path)?;
     }
 
-    runtime_dir.push("halogen.sock");
+    socket_name.push_str(&session_id);
+    socket_name.push_str(".sock");
 
-    Ok(runtime_dir)
+    path.push(socket_name);
+
+    Ok(path)
 }
 
 #[cfg(feature = "serde_json")]
@@ -51,6 +67,8 @@ pub enum Error {
     Io(std::io::Error),
     /// An error returned by [`get_socket_path`] when the socket path is invalid.
     InvalidSocketPath(PathBuf),
+    /// An error returned by [`get_socket_path`] when an environment variable is invalid. Returns the environment variable key.
+    InvalidEnviron(&'static str),
     /// An error that occured when parsing json
     Json(JsonError),
     /// An error that is returned from futures that ended too early
@@ -71,6 +89,7 @@ impl std::fmt::Display for Error {
         match self {
             Self::Io(e) => e.fmt(f),
             Self::InvalidSocketPath(p) => write!(f, "Invalid socket path: {}", p.display()),
+            Self::InvalidEnviron(e) => write!(f, "Missing or invalid environment variable: {e}"),
             Self::Json(e) => e.fmt(f),
             Self::EarlyReturn => "Future returned too early".fmt(f),
             Self::SendError => "Error sending message through channel".fmt(f),
