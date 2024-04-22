@@ -19,9 +19,12 @@ async fn signal_handler(interface: halogen::interface::InterfaceStub) -> R<()> {
             // }
         };
     }
-    let signals = signals![interrupt, quit, terminate].map(|(mut sig, name)| async move {
-        let _ = sig.recv().await;
-        warn!("Received signal: {name}")
+    let signals = signals![interrupt, quit, terminate].map(|(mut sig, name)| {
+        let int = interface.clone();
+        async move {
+            let _ = sig.recv().await;
+            warn!("Received signal: {name}");
+        }
     });
 
     bail!("Signal handler returned!")

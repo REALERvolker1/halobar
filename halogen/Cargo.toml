@@ -19,7 +19,7 @@ tokio = { workspace = true }
 
 tracing = { workspace = true }
 serde = { workspace = true }
-# once_cell = { workspace = true, optional = true }
+once_cell = { workspace = true }
 color-eyre = { workspace = true, optional = true }
 tracing-error = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }

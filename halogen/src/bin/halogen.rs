@@ -22,7 +22,7 @@ fn main() -> halogen_stuff::R<()> {
     logger.init();
 
     let future = async move {
-        let (mut server, stub) = halogen::interface::Interface::new()?;
+        let (mut server, stub) = halogen::interface::Interface::new().await?;
 
         let server_handle = tokio::spawn(async move { server.server().await });
 

@@ -1,11 +1,27 @@
-use std::path::Path;
+use std::{path::Path, sync::atomic::AtomicU16};
 
 use crate::imports::*;
+
+type IdType = u16;
+
+/// This allows us to have multiple interfaces without confusing everyone.
+static NEXT_ID: Mutex<IdType> = Mutex::const_new(0);
+
+/// registers a new Id
+async fn register() -> IdType {
+    let out;
+    let mut write = NEXT_ID.lock().await;
+    out = *write;
+    *write += 1;
+
+    return out;
+}
 
 /// The interface for a socket. This is the primary singleton for the crate.
 #[derive(Debug)]
 pub struct Interface {
-    socket_path: PathBuf,
+    id: IdType,
+    socket_path: Arc<PathBuf>,
     state: InterfaceState,
     my_receiver: Arc<flume::Receiver<Message>>,
     sub_sender: Arc<flume::Sender<Message>>,
@@ -13,14 +29,16 @@ pub struct Interface {
 impl Interface {
     /// Create a new [`Server`] to primarily write to the socket
     #[instrument(level = "debug", skip_all)]
-    pub fn new() -> Result<(Self, InterfaceStub), Error> {
+    pub async fn new() -> Result<(Self, InterfaceStub), Error> {
         let socket_path = crate::get_socket_path()?;
+        let id = register().await;
 
         let state = if socket_path.exists() {
             InterfaceState::Potential(InterfaceType::Client)
         } else {
             InterfaceState::Potential(InterfaceType::Server)
         };
+        let socket_path = Arc::new(socket_path);
 
         // let stream = UnixStream::connect(&socket_path).await?;
         // let socket = UnixListener::bind(&socket_path)?;
@@ -29,18 +47,25 @@ impl Interface {
         let (sub_sender, sr) = flume::unbounded();
 
         let me = Self {
-            socket_path,
+            id,
+            socket_path: Arc::clone(&socket_path),
             state,
             my_receiver: Arc::new(my_receiver),
             sub_sender: Arc::new(sub_sender),
         };
 
         let stub = InterfaceStub {
+            id,
+            socket_path,
             sender: Arc::new(s),
             receiver: Arc::new(sr),
         };
 
         Ok((me, stub))
+    }
+    #[inline]
+    pub fn id(&self) -> IdType {
+        self.id
     }
     /// Act as a socket interface, sending and receiving messages -- like a client.
     ///
@@ -50,7 +75,7 @@ impl Interface {
     pub async fn interface(&mut self) -> Result<(), Error> {
         self.state.try_as(InterfaceType::Client)?;
 
-        let stream = UnixStream::connect(&self.socket_path).await?;
+        let stream = UnixStream::connect(self.path()).await?;
 
         let owned_sender = Arc::clone(&self.sub_sender);
         let owned_receiver = Arc::clone(&self.my_receiver);
@@ -70,7 +95,7 @@ impl Interface {
     pub async fn server(&mut self) -> Result<(), Error> {
         self.state.try_as(InterfaceType::Server)?;
 
-        let socket = UnixListener::bind(&self.socket_path)?;
+        let socket = UnixListener::bind(self.path())?;
         let mut handles = futures_util::stream::FuturesUnordered::new();
 
         loop {
@@ -180,24 +205,33 @@ impl Interface {
         }
     }
     /// remove socket file when this is done. Essential for servers
-    pub fn drop_file(&mut self) {
+    pub fn drop_path(&mut self) {
         if self.state == InterfaceState::Current(InterfaceType::Server) {
-            if self.socket_path.is_file() {
-                if let Err(e) = std::fs::remove_file(&self.socket_path) {
-                    error!(
-                        "Failed to remove socket path: {e} at {}",
-                        self.socket_path.display()
-                    );
-                }
-            } else {
-                debug!("Removing socket path: {}", self.socket_path.display());
-            }
+            drop_socket_path_inner(&self.socket_path)
         }
+    }
+    /// Get the socket path
+    #[inline]
+    pub fn path<'p>(&'p self) -> &'p Path {
+        &self.socket_path
     }
 }
 impl Drop for Interface {
     fn drop(&mut self) {
-        self.drop_file()
+        self.drop_path()
+    }
+}
+
+fn drop_socket_path_inner(socket_path: &Path) {
+    if socket_path.is_file() {
+        if let Err(e) = std::fs::remove_file(socket_path) {
+            error!(
+                "Failed to remove socket path: {e} at {}",
+                socket_path.display()
+            );
+        }
+    } else {
+        debug!("Removing socket path: {}", socket_path.display());
     }
 }
 
@@ -239,6 +273,8 @@ impl InterfaceState {
 /// Uses `Arc` internally so it is cheap to clone.
 #[derive(Debug, Clone)]
 pub struct InterfaceStub {
+    id: IdType,
+    socket_path: Arc<PathBuf>,
     pub sender: Arc<flume::Sender<Message>>,
     pub receiver: Arc<flume::Receiver<Message>>,
 }
@@ -247,5 +283,21 @@ impl InterfaceStub {
     #[inline]
     pub fn send(&self, message: Message) -> Result<(), flume::SendError<Message>> {
         self.sender.send(message)
+    }
+    /// Get the socket path
+    #[inline]
+    pub fn path<'p>(&'p self) -> &'p Path {
+        &self.socket_path
+    }
+    #[inline]
+    pub fn id(&self) -> IdType {
+        self.id
+    }
+    /// Drop (remove) the socket path
+    ///
+    /// Safety: This will halt all proceses that rely on this socket! Please use with care.
+    #[inline]
+    pub unsafe fn drop_path(&self) {
+        drop_socket_path_inner(&self.socket_path)
     }
 }
