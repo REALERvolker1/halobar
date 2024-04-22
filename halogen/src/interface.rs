@@ -204,10 +204,13 @@ impl Interface {
             }
         }
     }
-    /// remove socket file when this is done. Essential for servers
+    /// remove socket file when this is done. Essential for servers.
+    ///
+    /// This only works if this is a server.
     pub fn drop_path(&mut self) {
         if self.state == InterfaceState::Current(InterfaceType::Server) {
-            drop_socket_path_inner(&self.socket_path)
+            // safety: We are the server
+            unsafe { drop_socket_path_inner(&self.socket_path, self.id) }
         }
     }
     /// Get the socket path
@@ -222,7 +225,8 @@ impl Drop for Interface {
     }
 }
 
-fn drop_socket_path_inner(socket_path: &Path) {
+/// Removes the socket path
+unsafe fn drop_socket_path_inner(socket_path: &Path, id: IdType) {
     if socket_path.is_file() {
         if let Err(e) = std::fs::remove_file(socket_path) {
             error!(
@@ -231,7 +235,10 @@ fn drop_socket_path_inner(socket_path: &Path) {
             );
         }
     } else {
-        debug!("Removing socket path: {}", socket_path.display());
+        debug!(
+            "Listener with id {id} removed socket path: {}",
+            socket_path.display()
+        );
     }
 }
 
@@ -298,6 +305,6 @@ impl InterfaceStub {
     /// Safety: This will halt all proceses that rely on this socket! Please use with care.
     #[inline]
     pub unsafe fn drop_path(&self) {
-        drop_socket_path_inner(&self.socket_path)
+        drop_socket_path_inner(&self.socket_path, self.id)
     }
 }
