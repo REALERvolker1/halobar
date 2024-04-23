@@ -1,4 +1,4 @@
-pub use serde::{de::DeserializeOwned, Deserialize, Serialize};
+pub use serde::{Deserialize, Serialize};
 
 pub use crate::{Error, Message};
 
@@ -21,10 +21,5 @@ pub use serde_json as json;
 #[cfg(feature = "simd-json")]
 pub use simd_json as json;
 
-// #[inline]
-// pub fn from_bytes<D: DeserializeOwned>(input: &mut [u8]) -> Result<D, Error> {
-//     // serde_json does not mark this as unsafe, while simd-json does.
-//     #[cfg_attr(feature = "serde_json", allow(unused_unsafe))]
-//     let out = unsafe { json::from_slice(input) }?;
-//     Ok(out)
-// }
+#[cfg(all(not(target_arch = "x86_64"), feature = "simd-json"))]
+compile_error!("simd-json feature is only available for x86_64 architectures!");

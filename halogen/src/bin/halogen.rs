@@ -1,11 +1,5 @@
-#![cfg_attr(not(feature = "bin"), no_std)]
-#[cfg(not(feature = "bin"))]
-fn main() {}
-
-#[cfg(feature = "bin")]
 pub mod cli;
 
-#[cfg(feature = "bin")]
 fn main() -> cli::R<()> {
     use std::io::IsTerminal;
 
