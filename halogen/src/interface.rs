@@ -16,7 +16,6 @@ pub struct Interface {
     stub_receiver: mpsc::Receiver<InterfaceMessage>,
 }
 impl Interface {
-    /// Create a new [`Server`] to primarily write to the socket
     #[instrument(level = "debug", skip_all)]
     pub async fn new() -> Result<(Self, InterfaceStub), Error> {
         let socket_path = crate::get_socket_path()?;
@@ -51,12 +50,12 @@ impl Interface {
 
         Ok((me, stub))
     }
-    /// Act as a socket interface, sending and receiving messages -- like a client.
+    /// Act as a socket client, sending and receiving messages.
     ///
     /// There can be multiple clients, but they all get the same messages -- try not to make multiple in your crate!
     ///
     /// Consider spawning this on another async task, or joining this with another future that runs indefinitely.
-    pub async fn interface(&mut self) -> Result<(), Error> {
+    pub async fn client(&mut self) -> Result<(), Error> {
         self.state.try_as(InterfaceType::Client)?;
 
         let stream = UnixStream::connect(self.path()).await?;
@@ -152,11 +151,14 @@ impl Interface {
     /// remove socket file when this is done. Essential for servers.
     ///
     /// This only works if this is a server.
-    pub fn drop_path(&mut self) {
+    pub fn drop_path(&self) -> Result<(), Error> {
         if self.state == InterfaceState::Current(InterfaceType::Server) {
-            // safety: We are the server
-            unsafe { drop_socket_path_inner(&self.socket_path) }
+            std::fs::remove_file(&self.socket_path)?;
+        } else {
+            return Err(Error::InvalidState(self.state));
         }
+
+        Ok(())
     }
     /// Get the socket path
     #[inline]
@@ -166,25 +168,22 @@ impl Interface {
 }
 impl Drop for Interface {
     fn drop(&mut self) {
-        self.drop_path()
-    }
-}
-
-/// Removes the socket path
-unsafe fn drop_socket_path_inner(socket_path: &Path) {
-    if socket_path.is_file() {
-        if let Err(e) = std::fs::remove_file(socket_path) {
-            error!(
-                "Failed to remove socket path: {e} at {}",
-                socket_path.display()
-            );
+        match self.drop_path() {
+            Ok(_) => debug!(
+                "Interface removed socket path: {}",
+                self.socket_path.display()
+            ),
+            Err(e) => error!(
+                "Interface failed to remove socket path: {e} at {}",
+                self.socket_path.display()
+            ),
         }
-    } else {
-        debug!("Interface removed socket path: {}", socket_path.display());
     }
 }
 
-/// The type of interface this is
+/// The type of interface this is.
+///
+/// This is very similar to [`crate::SenderType`] but it fulfills a different purpose
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InterfaceType {
     Client,
