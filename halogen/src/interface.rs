@@ -8,12 +8,10 @@ const BUFFER_SIZE: usize = 2048;
 /// The interface for a socket. This should be a singleton.
 #[derive(Debug)]
 pub struct Interface {
-    socket_path: PathBuf,
+    socket_path: Arc<PathBuf>,
     state: InterfaceState,
     sock_receiver: Arc<flume::Receiver<Message>>,
     sub_sender: Arc<flume::Sender<Message>>,
-
-    stub_receiver: mpsc::Receiver<InterfaceMessage>,
 }
 impl Interface {
     #[instrument(level = "debug", skip_all)]
@@ -26,26 +24,25 @@ impl Interface {
             InterfaceState::Potential(InterfaceType::Server)
         };
 
+        let socket_path = Arc::new(socket_path);
+
         // let stream = UnixStream::connect(&socket_path).await?;
         // let socket = UnixListener::bind(&socket_path)?;
 
         let (s, sock_receiver) = flume::unbounded();
         let (sub_sender, sr) = flume::unbounded();
-        // These messages are high priority
-        let (interface_sender, stub_receiver) = mpsc::channel(3);
 
         let me = Self {
-            socket_path,
+            socket_path: Arc::clone(&socket_path),
             state,
             sock_receiver: Arc::new(sock_receiver),
             sub_sender: Arc::new(sub_sender),
-            stub_receiver,
         };
 
         let stub = InterfaceStub {
+            socket_path,
             sender: Arc::new(s),
             receiver: Arc::new(sr),
-            interface_sender: Arc::new(interface_sender),
         };
 
         Ok((me, stub))
@@ -148,18 +145,6 @@ impl Interface {
             }
         }
     }
-    /// remove socket file when this is done. Essential for servers.
-    ///
-    /// This only works if this is a server.
-    pub fn drop_path(&self) -> Result<(), Error> {
-        if self.state == InterfaceState::Current(InterfaceType::Server) {
-            std::fs::remove_file(&self.socket_path)?;
-        } else {
-            return Err(Error::InvalidState(self.state));
-        }
-
-        Ok(())
-    }
     /// Get the socket path
     #[inline]
     pub fn path<'p>(&'p self) -> &'p Path {
@@ -168,7 +153,7 @@ impl Interface {
 }
 impl Drop for Interface {
     fn drop(&mut self) {
-        match self.drop_path() {
+        match remove_socket(self.socket_path.as_path(), self.state) {
             Ok(_) => debug!(
                 "Interface removed socket path: {}",
                 self.socket_path.display()
@@ -179,6 +164,18 @@ impl Drop for Interface {
             ),
         }
     }
+}
+
+/// Remove the socketfile. This is used internally by any server impl.
+#[instrument(level = "debug", skip_all)]
+fn remove_socket(socket: &Path, interface_state: InterfaceState) -> Result<(), Error> {
+    if interface_state == InterfaceState::Current(InterfaceType::Server) {
+        std::fs::remove_file(socket)?;
+    } else {
+        return Err(Error::InvalidState(interface_state));
+    }
+
+    Ok(())
 }
 
 /// The type of interface this is.
@@ -221,18 +218,19 @@ impl InterfaceState {
 /// Uses `Arc` internally so it is cheap to clone.
 #[derive(Debug, Clone)]
 pub struct InterfaceStub {
+    /// Literally just here for the server drop
+    socket_path: Arc<PathBuf>,
+
     pub sender: Arc<flume::Sender<Message>>,
     pub receiver: Arc<flume::Receiver<Message>>,
-
-    interface_sender: Arc<mpsc::Sender<InterfaceMessage>>,
 }
 impl InterfaceStub {
     #[inline]
     pub fn clone_of_arc(&self) -> Self {
         Self {
+            socket_path: Arc::clone(&self.socket_path),
             sender: Arc::clone(&self.sender),
             receiver: Arc::clone(&self.receiver),
-            interface_sender: Arc::clone(&self.interface_sender),
         }
     }
     /// Send a messsage to the internal sender.
@@ -242,12 +240,13 @@ impl InterfaceStub {
     }
     /// Try to drop (remove) the socket path
     ///
-    /// This sends a message to the current interface to drop the socket. If it is a client, this does nothing.
+    /// This only works if the current [`Interface`] is a server.
     #[inline]
-    pub async fn try_drop_path(&self) -> Result<(), Error> {
-        self.interface_sender
-            .send(InterfaceMessage::DropSocket)
-            .await?;
+    pub fn drop_path(&self) -> Result<(), Error> {
+        remove_socket(
+            self.socket_path.as_path(),
+            InterfaceState::Current(InterfaceType::Server),
+        )?;
         Ok(())
     }
 }
@@ -312,8 +311,6 @@ async fn deserialize_bytes(
             }
         };
         partial_message.clear();
-
-        // TODO: Filter message based on preferences. If it came from a server, client, or any
 
         sends.push_back(sender.send_async(message))
     }

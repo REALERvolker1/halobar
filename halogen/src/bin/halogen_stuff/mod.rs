@@ -37,7 +37,7 @@ async fn server_signal_handler(interface: halogen::interface::InterfaceStub) -> 
             async move {
                 let _ = signal_recv.recv().await;
                 // safety: We are a server
-                if let Err(e) = int.try_drop_path().await {
+                if let Err(e) = int.drop_path() {
                     error!("Error while trying to drop socket path: {e}");
                 }
 
