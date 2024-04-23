@@ -2,25 +2,9 @@ use std::{path::Path, sync::atomic::AtomicU16};
 
 use crate::imports::*;
 
-type IdType = u16;
-
-/// This allows us to have multiple interfaces without confusing everyone.
-static NEXT_ID: Mutex<IdType> = Mutex::const_new(0);
-
-/// registers a new Id
-async fn register() -> IdType {
-    let out;
-    let mut write = NEXT_ID.lock().await;
-    out = *write;
-    *write += 1;
-
-    return out;
-}
-
-/// The interface for a socket. This is the primary singleton for the crate.
+/// The interface for a socket. This should be a singleton.
 #[derive(Debug)]
 pub struct Interface {
-    id: IdType,
     socket_path: Arc<PathBuf>,
     state: InterfaceState,
     my_receiver: Arc<flume::Receiver<Message>>,
@@ -31,7 +15,6 @@ impl Interface {
     #[instrument(level = "debug", skip_all)]
     pub async fn new() -> Result<(Self, InterfaceStub), Error> {
         let socket_path = crate::get_socket_path()?;
-        let id = register().await;
 
         let state = if socket_path.exists() {
             InterfaceState::Potential(InterfaceType::Client)
@@ -47,7 +30,6 @@ impl Interface {
         let (sub_sender, sr) = flume::unbounded();
 
         let me = Self {
-            id,
             socket_path: Arc::clone(&socket_path),
             state,
             my_receiver: Arc::new(my_receiver),
@@ -55,17 +37,12 @@ impl Interface {
         };
 
         let stub = InterfaceStub {
-            id,
             socket_path,
             sender: Arc::new(s),
             receiver: Arc::new(sr),
         };
 
         Ok((me, stub))
-    }
-    #[inline]
-    pub fn id(&self) -> IdType {
-        self.id
     }
     /// Act as a socket interface, sending and receiving messages -- like a client.
     ///
@@ -170,14 +147,6 @@ impl Interface {
                     break;
                 }
 
-                // let decoded = match std::str::from_utf8(&read_buffer) {
-                //     Ok(s) => s,
-                //     Err(e) => {
-                //         warn!("Halogen server decoding error: {e}");
-                //         continue;
-                //     }
-                // };
-
                 for byte in read_buffer {
                     // nullbyte-delimited
                     if byte != 0 {
@@ -214,7 +183,7 @@ impl Interface {
     pub fn drop_path(&mut self) {
         if self.state == InterfaceState::Current(InterfaceType::Server) {
             // safety: We are the server
-            unsafe { drop_socket_path_inner(&self.socket_path, self.id) }
+            unsafe { drop_socket_path_inner(&self.socket_path) }
         }
     }
     /// Get the socket path
@@ -230,7 +199,7 @@ impl Drop for Interface {
 }
 
 /// Removes the socket path
-unsafe fn drop_socket_path_inner(socket_path: &Path, id: IdType) {
+unsafe fn drop_socket_path_inner(socket_path: &Path) {
     if socket_path.is_file() {
         if let Err(e) = std::fs::remove_file(socket_path) {
             error!(
@@ -240,7 +209,7 @@ unsafe fn drop_socket_path_inner(socket_path: &Path, id: IdType) {
         }
     } else {
         debug!(
-            "Listener with id {id} removed socket path: {}",
+            "Interface removed socket path: {}",
             socket_path.display()
         );
     }
@@ -284,7 +253,6 @@ impl InterfaceState {
 /// Uses `Arc` internally so it is cheap to clone.
 #[derive(Debug, Clone)]
 pub struct InterfaceStub {
-    id: IdType,
     socket_path: Arc<PathBuf>,
     pub sender: Arc<flume::Sender<Message>>,
     pub receiver: Arc<flume::Receiver<Message>>,
@@ -300,15 +268,11 @@ impl InterfaceStub {
     pub fn path<'p>(&'p self) -> &'p Path {
         &self.socket_path
     }
-    #[inline]
-    pub fn id(&self) -> IdType {
-        self.id
-    }
     /// Drop (remove) the socket path
     ///
     /// Safety: This will halt all proceses that rely on this socket! Please use with care.
     #[inline]
     pub unsafe fn drop_path(&self) {
-        drop_socket_path_inner(&self.socket_path, self.id)
+        drop_socket_path_inner(&self.socket_path)
     }
 }
