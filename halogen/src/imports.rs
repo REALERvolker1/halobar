@@ -10,7 +10,7 @@ pub use std::{
 };
 
 pub use ahash::{HashMap, HashMapExt};
-pub use futures_util::StreamExt;
+pub use futures_util::{stream::FuturesUnordered, StreamExt};
 pub use tokio::net::{UnixListener, UnixStream};
 pub use tracing::{debug, error, instrument, trace, warn};
 

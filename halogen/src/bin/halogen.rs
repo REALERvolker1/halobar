@@ -1,8 +1,8 @@
 pub mod cli;
 
-fn main() -> cli::R<()> {
-    use std::io::IsTerminal;
+use std::io::IsTerminal;
 
+fn main() -> cli::R<()> {
     color_eyre::install()?;
 
     if let Some(log_level) = cli::cli::CLI.log_level.tracing() {

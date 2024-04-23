@@ -7,6 +7,10 @@ pub use v1::*;
 pub const LATEST_API_VERSION: u8 = 1;
 
 /// An internal library for stuff imported from other crates
+#[cfg(feature = "bin")]
+pub mod imports;
+
+#[cfg(not(feature = "bin"))]
 mod imports;
 
 /// The main interface

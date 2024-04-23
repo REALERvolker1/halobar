@@ -76,7 +76,7 @@ impl Interface {
         self.state.try_as(InterfaceType::Server)?;
 
         let socket = UnixListener::bind(self.path())?;
-        let mut handles = futures_util::stream::FuturesUnordered::new();
+        let mut handles = FuturesUnordered::new();
 
         loop {
             let (stream, address) = match socket.accept().await {

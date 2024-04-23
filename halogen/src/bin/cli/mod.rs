@@ -1,13 +1,8 @@
 pub mod cli;
 
 pub use color_eyre::eyre::{bail, Report};
-pub use futures_util::{stream::FuturesUnordered, StreamExt};
-use std::process::exit;
-pub use std::{
-    env,
-    path::{Path, PathBuf},
-};
-pub use tracing::{debug, error, info, instrument, trace, warn};
+pub use halogen::imports::*;
+pub use tracing::info;
 
 pub type R<T> = color_eyre::Result<T>;
 
@@ -36,7 +31,7 @@ pub async fn server_signal_handler(interface: halogen::interface::InterfaceStub)
                 }
 
                 warn!("Received signal: {name}, shutting down...");
-                exit(sig.as_raw_value())
+                std::process::exit(sig.as_raw_value())
             }
         })
         .into_iter()

@@ -29,17 +29,17 @@ codegen-units = 1
 
 [workspace.dependencies]
 
-iced = { git = "https://github.com/pop-os/iced", version = "0.12.0", features = [
-    "tokio",
-    "lazy",
-    "image",
-    "multi-window",
-    "palette",
-    "svg",
-    "wayland",
-    "wgpu",
-    "advanced",
-] }
+# iced = { git = "https://github.com/pop-os/iced", version = "0.12.0", features = [
+#     "tokio",
+#     "lazy",
+#     "image",
+#     "multi-window",
+#     "palette",
+#     "svg",
+#     "wayland",
+#     "wgpu",
+#     "advanced",
+# ] }
 
 strum = { version = "0.26.2", features = ["phf"] }
 strum_macros = "0.26.2"
@@ -110,7 +110,7 @@ tokio = { version = "1.37.0", features = [
 
 toml_edit = { version = "0.22.9", features = ["serde"] }
 clap = { version = "4.5.4", features = ["derive", "wrap_help"] }
-shellexpand = { version = "3.1.0", features = ["full"] }
+# shellexpand = { version = "3.1.0", features = ["full"] }
 
 halobar_core = { path = "halobar_core" }
 halobar_config = { path = "halobar_config" }
@@ -127,7 +127,7 @@ strum_macros = { workspace = true }
 konst = { workspace = true }
 once_cell = { workspace = true }
 futures-util = { workspace = true }
-iced = { workspace = true }
+# iced = { workspace = true }
 paste = { workspace = true }
 regex = { workspace = true }
 smart-default = { workspace = true }
@@ -142,7 +142,7 @@ nix = { workspace = true }
 
 halobar_core = { workspace = true }
 halobar_config = { workspace = true }
-halogen = { workspace = true, features = ["bin"] }
+halogen = { workspace = true, features = ["bin", "halobar_integration"] }
 
 # monoio = { version = "0.2.3", features = [
 #     "zero-copy",

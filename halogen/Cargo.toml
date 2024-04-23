@@ -20,7 +20,7 @@ tokio = { workspace = true }
 
 tracing = { workspace = true }
 serde = { workspace = true }
-once_cell = { workspace = true }
+once_cell = { workspace = true, optional = true }
 color-eyre = { workspace = true, optional = true }
 tracing-error = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }
@@ -28,7 +28,7 @@ tracing-appender = { workspace = true, optional = true }
 flume = { workspace = true }
 futures-util = { workspace = true }
 clap = { workspace = true, optional = true }
-shellexpand = { workspace = true, optional = true }
+# shellexpand = { workspace = true, optional = true }
 smallvec = { workspace = true }
 derive_more = { workspace = true }
 
@@ -44,8 +44,10 @@ bin = [
     "dep:tracing-appender",
     "dep:color-eyre",
     "dep:clap",
-    "dep:shellexpand",
+    "dep:once_cell",
 ]
 
 serde_json = ["dep:serde_json"]
 simd-json = ["dep:simd-json"]
+
+halobar_integration = []
