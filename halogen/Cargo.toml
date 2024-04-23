@@ -29,10 +29,12 @@ futures-util = { workspace = true }
 clap = { workspace = true, optional = true }
 shellexpand = { workspace = true, optional = true }
 smallvec = { workspace = true }
+derive_more = { workspace = true }
 
 serde_json = { version = "1.0", optional = true }
 simd-json = { version = "0.13", optional = true, features = ["known-key"] }
 
+# TODO: Make bin feature optional
 [features]
 default = ["simd-json", "bin"]
 

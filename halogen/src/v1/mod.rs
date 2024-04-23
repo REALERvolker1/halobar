@@ -170,13 +170,30 @@ pub enum SenderType {
 }
 
 /// A general-purpose status
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    derive_more::Display,
+)]
 pub enum Status {
+    #[display(fmt = "good")]
     Good,
     #[default]
+    #[display(fmt = "normal")]
     Normal,
+    #[display(fmt = "warn")]
     Warn,
+    #[display(fmt = "bad")]
     Bad,
+    #[display(fmt = "critical")]
     Critical,
 }
 impl Status {
@@ -198,18 +215,6 @@ impl Status {
             Self::Warn => tracing::warn!(message),
             Self::Bad | Self::Critical => tracing::error!(message),
         }
-    }
-}
-impl std::fmt::Display for Status {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Good => "good",
-            Self::Normal => "normal",
-            Self::Warn => "warn",
-            Self::Bad => "bad",
-            Self::Critical => "critical",
-        }
-        .fmt(f)
     }
 }
 
