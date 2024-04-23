@@ -1,4 +1,4 @@
-use crate::ParserState;
+use super::ParserState;
 
 /// An error that can be returned by the formatter
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Error, derive_more::Display)]

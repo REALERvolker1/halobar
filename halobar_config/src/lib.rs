@@ -5,6 +5,9 @@
 /// Private submodule for the config macro
 mod r#macro;
 
+/// Parsing custom formatting strings
+pub mod fmt;
+
 use std::{
     env, fs, io,
     path::{Path, PathBuf},

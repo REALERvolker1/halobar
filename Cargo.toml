@@ -11,7 +11,7 @@ keywords.workspace = true
 categories.workspace = true
 
 [workspace]
-members = ["halobar_config", "halobar_core", "halobar_fmt", "halogen"]
+members = ["halobar_config", "halobar_core", "halogen"]
 
 [workspace.package]
 edition = "2021"
@@ -112,7 +112,6 @@ toml_edit = { version = "0.22.9", features = ["serde"] }
 clap = { version = "4.5.4", features = ["derive", "wrap_help"] }
 shellexpand = { version = "3.1.0", features = ["full"] }
 
-halobar_fmt = { path = "halobar_fmt" }
 halobar_core = { path = "halobar_core" }
 halobar_config = { path = "halobar_config" }
 halogen = { path = "halogen" }
@@ -141,7 +140,6 @@ tracing-appender = { workspace = true }
 uuid = { workspace = true }
 nix = { workspace = true }
 
-halobar_fmt = { workspace = true }
 halobar_core = { workspace = true }
 halobar_config = { workspace = true }
 halogen = { workspace = true }

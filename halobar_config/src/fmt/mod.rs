@@ -27,11 +27,23 @@ impl FmtSegmentVec {
     }
 }
 
+/// A raw String that contains special syntax for formatting
 #[derive(
-    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize, derive_more::Display,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Deserialize,
+    Serialize,
+    derive_more::Display,
+    derive_more::From,
+    derive_more::AsRef,
 )]
 pub struct FormatStr(String);
 impl FormatStr {
+    /// Parse this string into [`FmtSegmentVec`]
     #[inline(always)]
     pub fn parse(self) -> Result<FmtSegmentVec, FormatStrError> {
         parse(self.0)
@@ -54,12 +66,6 @@ impl FromStr for FormatStr {
         Ok(Self(s.to_owned()))
     }
 }
-impl From<String> for FormatStr {
-    #[inline(always)]
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
 
 /// A borrowed FmtSegmentVec. Useful for copying.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,11 +85,15 @@ impl<'a> Iterator for FmtSegments<'a> {
 /// The inner representation of a var string.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Variable {
+    /// The variable name as a String
     pub ident: String,
-    pub truthy: Vec<String>,
+    /// These segments are printed in order, joined with the value.
+    truthy: Vec<String>,
+    /// The default "placeholder" value to display when there is no value
     pub falsy: String,
 }
 impl Variable {
+    /// Get the correct string to show when the variable is truthy
     pub fn truthy(&self, value: &str) -> String {
         if self.truthy.is_empty() {
             return value.to_owned();
@@ -93,9 +103,12 @@ impl Variable {
     }
 }
 
+/// An individual segment of a FormatVec
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub enum Segment {
+    /// A String to pass in, verbatim
     Literal(String),
+    /// A variable, denoted with special syntax
     Variable(Variable),
 }
 impl Default for Segment {
@@ -105,11 +118,15 @@ impl Default for Segment {
 }
 
 /// An enum used internally. It is marked as public because it could be part of an error message
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParserState {
+    /// Currently parsing a Literal
     Literal,
+    /// Parsing the variable name segment
     VarIdent,
+    /// Parsing the truthy segment
     VarTruthy,
+    /// Parsing the falsy segment
     VarFalsy,
 }
 
