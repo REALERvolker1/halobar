@@ -1,5 +1,18 @@
 use super::*;
 
+/// An enum used internally. It is marked as public because it could be part of an error message
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParserState {
+    /// Currently parsing a Literal
+    Literal,
+    /// Parsing the variable name segment
+    VarIdent,
+    /// Parsing the truthy segment
+    VarTruthy,
+    /// Parsing the falsy segment
+    VarFalsy,
+}
+
 /// Parse a variable string
 ///
 /// Refer to [`HaloFormatter`] for more information, including format syntax.

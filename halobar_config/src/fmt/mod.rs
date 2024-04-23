@@ -3,90 +3,10 @@ use std::{convert::Infallible, mem::take, str::FromStr};
 
 mod error;
 pub use error::FormatStrError;
-mod parse;
-pub use parse::parse;
+mod parser;
+pub use parser::parse;
 mod halotype;
 pub use halotype::*;
-
-/// The inner representation of a fmt string.
-#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize, Serialize)]
-pub struct FmtSegmentVec {
-    inner: Vec<Segment>,
-    min_length: usize,
-}
-impl FmtSegmentVec {
-    /// Get the inner Vec of [`Segment`], consuming self
-    #[inline]
-    pub fn to_vec(self) -> Vec<Segment> {
-        self.inner
-    }
-    /// Get a [`FmtSegments`] for this Vec, which allows for iteration.
-    #[inline]
-    pub fn segments<'a>(&'a self) -> FmtSegments<'a> {
-        FmtSegments {
-            min_len: self.min_length,
-            inner: self.inner.as_slice(),
-            current_idx: 0,
-        }
-    }
-}
-
-/// A raw String that contains special syntax for formatting
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Deserialize,
-    Serialize,
-    derive_more::Display,
-    derive_more::From,
-    derive_more::AsRef,
-)]
-pub struct FormatStr(String);
-impl FormatStr {
-    /// Parse this string into [`FmtSegmentVec`]
-    #[inline(always)]
-    pub fn parse(self) -> Result<FmtSegmentVec, FormatStrError> {
-        parse(self.0)
-    }
-    /// Get the internal string as a slice
-    #[inline(always)]
-    pub fn str<'a>(&'a self) -> &'a str {
-        &self.0
-    }
-    /// Get the internal string, consuming
-    #[inline(always)]
-    pub fn string(self) -> String {
-        self.0
-    }
-}
-impl FromStr for FormatStr {
-    type Err = Infallible;
-    #[inline(always)]
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(s.to_owned()))
-    }
-}
-
-/// A borrowed FmtSegmentVec. Useful for copying.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FmtSegments<'a> {
-    /// Just here so the string doesn't realloc a ton when printing
-    min_len: usize,
-    inner: &'a [Segment],
-    current_idx: usize,
-}
-impl<'a> Iterator for FmtSegments<'a> {
-    type Item = &'a Segment;
-    fn next(&mut self) -> Option<Self::Item> {
-        let item = self.inner.get(self.current_idx)?;
-        self.current_idx += 1;
-        Some(item)
-    }
-}
 
 /// The inner representation of a var string.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -121,19 +41,6 @@ impl Default for Segment {
     fn default() -> Self {
         Self::Literal(Default::default())
     }
-}
-
-/// An enum used internally. It is marked as public because it could be part of an error message
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ParserState {
-    /// Currently parsing a Literal
-    Literal,
-    /// Parsing the variable name segment
-    VarIdent,
-    /// Parsing the truthy segment
-    VarTruthy,
-    /// Parsing the falsy segment
-    VarFalsy,
 }
 
 /// A formatter struct whose keys correspond to variables in the format segments.
