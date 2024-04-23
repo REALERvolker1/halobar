@@ -10,18 +10,22 @@ pub use halotype::*;
 
 /// The inner representation of a fmt string.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize, Serialize)]
-pub struct FmtSegmentVec(Vec<Segment>);
+pub struct FmtSegmentVec {
+    inner: Vec<Segment>,
+    min_length: usize,
+}
 impl FmtSegmentVec {
     /// Get the inner Vec of [`Segment`], consuming self
-    #[inline(always)]
+    #[inline]
     pub fn to_vec(self) -> Vec<Segment> {
-        self.0
+        self.inner
     }
     /// Get a [`FmtSegments`] for this Vec, which allows for iteration.
-    #[inline(always)]
+    #[inline]
     pub fn segments<'a>(&'a self) -> FmtSegments<'a> {
         FmtSegments {
-            inner: self.0.as_slice(),
+            min_len: self.min_length,
+            inner: self.inner.as_slice(),
             current_idx: 0,
         }
     }
@@ -70,6 +74,8 @@ impl FromStr for FormatStr {
 /// A borrowed FmtSegmentVec. Useful for copying.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FmtSegments<'a> {
+    /// Just here so the string doesn't realloc a ton when printing
+    min_len: usize,
     inner: &'a [Segment],
     current_idx: usize,
 }
@@ -130,42 +136,92 @@ pub enum ParserState {
     VarFalsy,
 }
 
+// /// The inner function of [`HaloFormatter::format`]
+// #[macro_export]
+// macro_rules! haloformatter_format {
+//     ($segments:expr; $( $key:ident: $determine_truth:expr => $inner_value ),+$(,)?) => {
+//             let mut out = String::with_capacity($segments.min_len);
+
+//             for segment in $segments {
+//                 match segment {
+//                     Segment::Literal(l) => out.push_str(l),
+//                     Segment::Variable(v) => match v.ident.as_str() {
+//                         $(
+//                             stringify!($key) => {
+//                                 let truthy = $determine_truth;
+//                                 out.push_str(truthy);
+//                             }
+//                         )+
+//                     },
+//                 }
+//             }
+
+//             out
+//     };
+// }
+
 /// A formatter struct whose keys correspond to variables in the format segments.
 pub trait HaloFormatter {
     /// The type of data that this formatter will format
     type Data;
+    /// Get the fields of the required data type -- the possible variable placeholders
+    fn fields() -> &'static [&'static str];
     /// Get a map of the fields of this struct that are contained in the [`FmtSegments`].
     /// Each key corresponds to a boolean that denotes if the field is contained within the Segments.
     ///
-    /// Implementation detail: You may use the [`variable_map`] function in the crate root to do most of the heavy lifting.
+    /// Implementation detail: This does not have to be manually implemented.
     /// ```
     /// ```
-    fn variable_map<'b>(
-        &self,
-        segments: FmtSegments<'b>,
-    ) -> Result<Vec<&'static str>, FormatStrError>;
+    fn variable_map<'b>(segments: FmtSegments<'b>) -> Result<Vec<&'static str>, FormatStrError> {
+        let keys = Self::fields();
+        let mut map = Vec::new();
+
+        let variables = segments.filter_map(|s| match s {
+            Segment::Literal(_) => None,
+            Segment::Variable(v) => Some(&v.ident),
+        });
+
+        for var in variables {
+            let varstr = var.as_str();
+            for key in keys {
+                if varstr == *key {
+                    map.push(*key)
+                }
+            }
+        }
+
+        Ok(map)
+    }
     /// Parse some segments, determining what to print. This takes data and determines how it should print.
     fn format(&self, data: Self::Data, segments: FmtSegments) -> Result<String, FormatStrError>;
     /// Get a sane default format str for this variable
     fn default_format_str() -> FormatStr;
 }
 
-/// The internal [`HaloFormatter::variable_map`] function
-pub fn variable_map<'b, const N: usize>(
-    keys: [&'static str; N],
-    segments: FmtSegments<'b>,
-) -> Result<[(&'static str, bool); N], FormatStrError> {
-    let mut map = keys.map(|k| (k, false));
+// pub struct Data {
+//     value: u8,
+// }
 
-    let variables = segments.filter_map(|s| match s {
-        Segment::Literal(_) => None,
-        Segment::Variable(v) => Some(&v.ident),
-    });
+// pub struct DataFormatter {
+//     pub value: Data,
+//     segments: FmtSegmentVec,
+// }
+// impl HaloFormatter for DataFormatter {
+//     type Data = Data;
+//     fn fields() -> &'static [&'static str] {
+//         &["value"]
+//     }
+//     fn default_format_str() -> FormatStr {
+//         "Value {value?is $ percent:is empty}".to_owned().into()
+//     }
+//     fn format(&self, data: Self::Data, segments: FmtSegments) -> Result<String, FormatStrError> {
+//         haloformatter_format! {
+//             segments;
+//             value: {
+//                 if data.value > 0 {
 
-    for var in variables {
-        let varstr = var.as_str();
-        map = map.map(|(k, b)| if k == varstr { (k, true) } else { (k, b) });
-    }
-
-    Ok(map)
-}
+//                 }
+//             },
+//         }
+//     }
+// }

@@ -84,11 +84,14 @@ pub fn parse<S: AsRef<str>>(interpolated_string: S) -> Result<FmtSegmentVec, For
     let mut current_literal = String::new();
     let mut current_variable = Variable::default();
     let mut current_truthy = String::new();
+    let mut min_length = 0usize;
+
     let mut current_state = ParserState::Literal;
     let mut is_escaped = false;
 
     macro_rules! push_char {
         ($character:expr) => {
+            min_length = min_length.saturating_add(1);
             is_escaped = false;
             match current_state {
                 ParserState::Literal => current_literal.push($character),
@@ -98,6 +101,7 @@ pub fn parse<S: AsRef<str>>(interpolated_string: S) -> Result<FmtSegmentVec, For
             }
         };
         ($character:expr => $collect:expr) => {
+            min_length = min_length.saturating_add(1);
             is_escaped = false;
             $collect.push($character)
         };
@@ -162,5 +166,8 @@ pub fn parse<S: AsRef<str>>(interpolated_string: S) -> Result<FmtSegmentVec, For
         }
     }
 
-    Ok(FmtSegmentVec(segments))
+    Ok(FmtSegmentVec {
+        min_length,
+        inner: segments,
+    })
 }

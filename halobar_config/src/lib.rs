@@ -1,6 +1,6 @@
 //! A library that provides helpful functions and macros for programs that need to read config files.
 
-#![forbid(missing_docs)]
+// #![forbid(missing_docs)]
 
 /// Private submodule for the config macro
 mod r#macro;
