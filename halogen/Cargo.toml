@@ -37,7 +37,6 @@ simd-json = { version = "0.13", optional = true, features = ["known-key"] }
 default = ["simd-json", "bin"]
 
 bin = [
-    "simd-json",
     "dep:tracing-subscriber",
     "dep:tracing-error",
     "dep:tracing-appender",

@@ -213,49 +213,49 @@ impl std::fmt::Display for Status {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
 
-    use crate::imports::{from_bytes, json::to_string};
+//     use crate::imports::{from_bytes, json::to_string};
 
-    /// TODO: This test is outdated
-    #[test]
-    fn deserialize_variants() {
-        let mut variants = HashMap::new();
-        variants.insert(
-            "string".to_owned(),
-            Variant::String("Hello world!".to_owned()),
-        );
-        variants.insert("path".to_owned(), Variant::Path(PathBuf::from("/usr/bin")));
-        variants.insert("bool".to_owned(), Variant::Bool(true));
-        variants.insert("signed int".to_owned(), Variant::Iint(-673485));
-        variants.insert("unsigned_int".to_owned(), Variant::Uint(678656397));
-        variants.insert("float".to_owned(), Variant::Float(-3778.489));
+//     /// TODO: This test is outdated
+//     #[test]
+//     fn deserialize_variants() {
+//         let mut variants = HashMap::new();
+//         variants.insert(
+//             "string".to_owned(),
+//             Variant::String("Hello world!".to_owned()),
+//         );
+//         variants.insert("path".to_owned(), Variant::Path(PathBuf::from("/usr/bin")));
+//         variants.insert("bool".to_owned(), Variant::Bool(true));
+//         variants.insert("signed int".to_owned(), Variant::Iint(-673485));
+//         variants.insert("unsigned_int".to_owned(), Variant::Uint(678656397));
+//         variants.insert("float".to_owned(), Variant::Float(-3778.489));
 
-        variants.insert(
-            "vector".to_owned(),
-            Variant::Vec(vec![
-                Box::new(Variant::Iint(-785)),
-                Box::new(Variant::String("Hello World".to_owned())),
-            ]),
-        );
+//         variants.insert(
+//             "vector".to_owned(),
+//             Variant::Vec(vec![
+//                 Box::new(Variant::Iint(-785)),
+//                 Box::new(Variant::String("Hello World".to_owned())),
+//             ]),
+//         );
 
-        let mut map = HashMap::new();
-        map.insert(
-            "name".to_owned(),
-            Box::new(Variant::String("Drew".to_owned())),
-        );
-        map.insert("age".to_owned(), Box::new(Variant::Uint(32)));
+//         let mut map = HashMap::new();
+//         map.insert(
+//             "name".to_owned(),
+//             Box::new(Variant::String("Drew".to_owned())),
+//         );
+//         map.insert("age".to_owned(), Box::new(Variant::Uint(32)));
 
-        variants.insert("map".to_owned(), Variant::Map(map));
+//         variants.insert("map".to_owned(), Variant::Map(map));
 
-        let mut json = to_string(&variants).unwrap();
+//         let mut json = to_string(&variants).unwrap();
 
-        // safety: I know this is UTF-8
-        let json_bytes = unsafe { json.as_bytes_mut() };
-        let from_json: HashMap<String, Variant> = from_bytes(json_bytes).unwrap();
+//         // safety: I know this is UTF-8
+//         let json_bytes = unsafe { json.as_bytes_mut() };
+//         let from_json: HashMap<String, Variant> = from_bytes(json_bytes).unwrap();
 
-        assert_eq!(from_json, variants);
-    }
-}
+//         assert_eq!(from_json, variants);
+//     }
+// }

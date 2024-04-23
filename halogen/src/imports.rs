@@ -11,34 +11,20 @@ pub use std::{
 
 pub use ahash::{HashMap, HashMapExt};
 pub use futures_util::StreamExt;
-pub use tokio::{
-    io::{self, AsyncBufRead, AsyncRead, AsyncWrite},
-    net::{UnixListener, UnixStream},
-    sync::{mpsc, watch, Mutex, RwLock},
-};
+pub use tokio::net::{UnixListener, UnixStream};
 pub use tracing::{debug, error, instrument, trace, warn};
 
 pub use smallvec::SmallVec;
-// #[inline]
-// pub fn to_string_pretty<S: ?Sized + Serialize>(value: &S) -> Result<String, serde_json::Error> {
-//     serde_json::to_string_pretty(value)
-// }
 
 #[cfg(feature = "serde_json")]
 pub use serde_json as json;
 #[cfg(feature = "simd-json")]
 pub use simd_json as json;
 
-#[cfg(feature = "serde_json")]
-#[inline]
-pub fn from_string<D: DeserializeOwned>(input_string: &str) -> Result<D, Error> {
-    let out = serde_json::from_str(input_string)?;
-    Ok(out)
-}
-
-#[cfg(feature = "simd-json")]
-#[inline]
-pub fn from_bytes<D: DeserializeOwned>(input: &mut [u8]) -> Result<D, Error> {
-    let out = unsafe { simd_json::from_slice(input) }?;
-    Ok(out)
-}
+// #[inline]
+// pub fn from_bytes<D: DeserializeOwned>(input: &mut [u8]) -> Result<D, Error> {
+//     // serde_json does not mark this as unsafe, while simd-json does.
+//     #[cfg_attr(feature = "serde_json", allow(unused_unsafe))]
+//     let out = unsafe { json::from_slice(input) }?;
+//     Ok(out)
+// }

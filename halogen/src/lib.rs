@@ -19,7 +19,6 @@ use std::{env, path::PathBuf};
 
 /// Try to get a valid socket path location.
 ///
-///
 /// First tries the environment variable `${HALOGEN_SOCK}`, then tries
 /// `${XDG_RUNTIME_DIR}/halogen/halogen${XDG_SESSION_ID}.sock`
 pub fn get_socket_path() -> Result<PathBuf, Error> {
