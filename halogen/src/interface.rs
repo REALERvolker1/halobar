@@ -8,10 +8,12 @@ const BUFFER_SIZE: usize = 2048;
 /// The interface for a socket. This should be a singleton.
 #[derive(Debug)]
 pub struct Interface {
-    socket_path: Arc<PathBuf>,
+    socket_path: PathBuf,
     state: InterfaceState,
     sock_receiver: Arc<flume::Receiver<Message>>,
     sub_sender: Arc<flume::Sender<Message>>,
+
+    stub_receiver: mpsc::Receiver<InterfaceMessage>,
 }
 impl Interface {
     /// Create a new [`Server`] to primarily write to the socket
@@ -24,25 +26,27 @@ impl Interface {
         } else {
             InterfaceState::Potential(InterfaceType::Server)
         };
-        let socket_path = Arc::new(socket_path);
 
         // let stream = UnixStream::connect(&socket_path).await?;
         // let socket = UnixListener::bind(&socket_path)?;
 
         let (s, sock_receiver) = flume::unbounded();
         let (sub_sender, sr) = flume::unbounded();
+        // These messages are high priority
+        let (interface_sender, stub_receiver) = mpsc::channel(3);
 
         let me = Self {
-            socket_path: Arc::clone(&socket_path),
+            socket_path,
             state,
             sock_receiver: Arc::new(sock_receiver),
             sub_sender: Arc::new(sub_sender),
+            stub_receiver,
         };
 
         let stub = InterfaceStub {
-            socket_path,
             sender: Arc::new(s),
             receiver: Arc::new(sr),
+            interface_sender: Arc::new(interface_sender),
         };
 
         Ok((me, stub))
@@ -119,15 +123,10 @@ impl Interface {
     ) -> Result<(), Error> {
         loop {
             let message = receiver.recv_async().await?;
-            let message_serialized = match message.into_json() {
-                Ok(m) => m,
-                Err(e) => {
-                    warn!("Failed to serialize message: {e}");
-                    continue;
-                }
-            };
-            stream.writable().await?;
-            stream.try_write(message_serialized.as_bytes())?;
+            if let Some(message_serialized) = format_message_for_sender(&message) {
+                stream.writable().await?;
+                stream.try_write(message_serialized.as_slice())?;
+            }
         }
     }
 
@@ -136,46 +135,17 @@ impl Interface {
         sender: Arc<flume::Sender<Message>>,
         stream: &UnixStream,
     ) -> Result<(), Error> {
-        let mut line_buffer = Vec::with_capacity(BUFFER_SIZE);
+        let mut line_buffer = SmallVec::<[u8; BUFFER_SIZE]>::new_const();
 
         loop {
             stream.readable().await?;
             let mut read_buffer = [0; BUFFER_SIZE];
 
-            loop {
-                let read = stream.try_read(&mut read_buffer)?;
-
-                if read == 0 {
-                    break;
-                }
-
-                for byte in read_buffer {
-                    // nullbyte-delimited
-                    if byte != 0 {
-                        line_buffer.push(byte);
-                        continue;
-                    }
-
-                    // TODO: Test if futures ordered is good for this
-                    let msg = match Message::try_from_raw(line_buffer.as_mut_slice()) {
-                        Ok(m) => m,
-                        Err(e) => {
-                            warn!("Halogen server decoding error: {e}");
-                            // it isn't the end of the world, it's just one message
-                            continue;
-                        }
-                    };
-
-                    // A server sent the message, ignore
-                    if msg.sender_type() == crate::SenderType::Server {
-                        continue;
-                    }
-
-                    sender.send(msg)?;
-
-                    // This only runs upon receiving a nullbyte, remember!
-                    line_buffer.clear();
-                }
+            // It is okay to loop like this, that function joins multiple futures that should all be in order.
+            while stream.try_read(&mut read_buffer)? > 0 {
+                deserialize_bytes(&mut line_buffer, read_buffer, &sender).await?;
+                // if something weird happens with my channel and it failed, that would be a shame
+                stream.readable().await?;
             }
         }
     }
@@ -252,27 +222,34 @@ impl InterfaceState {
 /// Uses `Arc` internally so it is cheap to clone.
 #[derive(Debug, Clone)]
 pub struct InterfaceStub {
-    socket_path: Arc<PathBuf>,
     pub sender: Arc<flume::Sender<Message>>,
     pub receiver: Arc<flume::Receiver<Message>>,
+
+    interface_sender: Arc<mpsc::Sender<InterfaceMessage>>,
 }
 impl InterfaceStub {
+    #[inline]
+    pub fn clone_of_arc(&self) -> Self {
+        Self {
+            sender: Arc::clone(&self.sender),
+            receiver: Arc::clone(&self.receiver),
+            interface_sender: Arc::clone(&self.interface_sender),
+        }
+    }
     /// Send a messsage to the internal sender.
     #[inline]
     pub fn send(&self, message: Message) -> Result<(), flume::SendError<Message>> {
         self.sender.send(message)
     }
-    /// Get the socket path
-    #[inline]
-    pub fn path<'p>(&'p self) -> &'p Path {
-        &self.socket_path
-    }
-    /// Drop (remove) the socket path
+    /// Try to drop (remove) the socket path
     ///
-    /// Safety: This will halt all proceses that rely on this socket! Please use with care.
+    /// This sends a message to the current interface to drop the socket. If it is a client, this does nothing.
     #[inline]
-    pub unsafe fn drop_path(&self) {
-        drop_socket_path_inner(&self.socket_path)
+    pub async fn try_drop_path(&self) -> Result<(), Error> {
+        self.interface_sender
+            .send(InterfaceMessage::DropSocket)
+            .await?;
+        Ok(())
     }
 }
 
@@ -282,14 +259,20 @@ impl InterfaceStub {
 ///
 /// Trust me, you don't wanna know any more than this.
 #[instrument(level = "trace", skip_all)]
-fn format_message_for_sender(message: &Message) -> Result<Vec<u8>, json::Error> {
-    let mut buffer = json::to_vec(message)?;
+fn format_message_for_sender(message: &Message) -> Option<Vec<u8>> {
+    let mut buffer = match json::to_vec(message) {
+        Ok(b) => b,
+        Err(e) => {
+            warn!("Failed to serialize message: {e}");
+            return None;
+        }
+    };
 
     // insert the API version as the first byte. This is so that I don't have to retry parsing 5 times for 5 different versions.
     buffer.insert(0, crate::LATEST_API_VERSION);
     // null-terminated strings in rust?????? (I didn't want to do this but I had no choice)
     buffer.push(0);
-    Ok(buffer)
+    Some(buffer)
 }
 
 /// If you use this in more than one spot in the code I will shank you
@@ -342,4 +325,10 @@ async fn deserialize_bytes(
         }
     }
     Ok(())
+}
+
+/// Messages sent to the interface for use internally
+pub enum InterfaceMessage {
+    DropSocket,
+    // more TBD
 }
