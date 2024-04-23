@@ -2,7 +2,12 @@ pub use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 pub use crate::{Error, Message};
 
-pub use std::{convert::Infallible, path::{Path, PathBuf}, str::FromStr, sync::Arc};
+pub use std::{
+    convert::Infallible,
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::Arc,
+};
 
 pub use ahash::{HashMap, HashMapExt};
 pub use futures_util::StreamExt;
@@ -12,6 +17,8 @@ pub use tokio::{
     sync::{mpsc, watch, Mutex, RwLock},
 };
 pub use tracing::{debug, error, instrument, trace, warn};
+
+pub use smallvec::SmallVec;
 // #[inline]
 // pub fn to_string_pretty<S: ?Sized + Serialize>(value: &S) -> Result<String, serde_json::Error> {
 //     serde_json::to_string_pretty(value)

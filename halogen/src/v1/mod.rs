@@ -132,14 +132,6 @@ impl Default for Message {
     }
 }
 impl Message {
-    // pub fn new(key: &str)
-    /// Deserialize a message from raw json bytes.
-    ///
-    /// This requires a mutable slice because the simd-json crate will mutate the slice and I want this to be zerocopy.
-    #[instrument(level = "trace", skip_all)]
-    pub fn try_from_raw(json: &mut [u8]) -> Result<Self, crate::imports::Error> {
-        crate::imports::from_bytes(json)
-    }
     /// Create a new message directly. Not recommended to use -- instead, use the helper impls provided by dedicated interfaces.
     #[instrument(level = "debug", skip_all)]
     pub fn new<S: Into<String>>(
@@ -155,12 +147,6 @@ impl Message {
             name: name.into(),
             data,
         }
-    }
-    /// Serialize this message into json fit to send to the socket.
-    #[instrument(level = "trace", skip_all)]
-    pub fn into_json(&self) -> Result<String, Error> {
-        let out = json::to_string(self)?;
-        Ok(out)
     }
     #[inline]
     pub const fn version(&self) -> u8 {

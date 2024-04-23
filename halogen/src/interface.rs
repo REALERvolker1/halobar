@@ -281,6 +281,7 @@ impl InterfaceStub {
 /// Format the message properly to be sent over the wire
 ///
 /// Trust me, you don't wanna know any more than this.
+#[instrument(level = "trace", skip_all)]
 fn format_message_for_sender(message: &Message) -> Result<Vec<u8>, json::Error> {
     let mut buffer = json::to_vec(message)?;
 
@@ -300,8 +301,9 @@ fn format_message_for_sender(message: &Message) -> Result<Vec<u8>, json::Error> 
 /// don't allocate a shit ton of RAM.
 ///
 /// chillax, it's an internal API
+#[instrument(level = "trace", skip_all)]
 async fn deserialize_bytes(
-    partial_message: &mut Vec<u8>,
+    partial_message: &mut SmallVec<[u8; BUFFER_SIZE]>,
     bytes: [u8; BUFFER_SIZE],
     sender: &flume::Sender<Message>,
 ) -> Result<(), Error> {
@@ -313,9 +315,11 @@ async fn deserialize_bytes(
             continue;
             // ends this iteration early so I don't have to indent this all the way to Saturn
         }
-        partial_message.reverse();
-        let api_version = partial_message.pop().ok_or(Error::InvalidApiVersion(0))?;
-        partial_message.reverse();
+        let api_version = partial_message.remove(0);
+        if api_version > crate::LATEST_API_VERSION {
+            return Err(Error::InvalidApiVersion(api_version));
+        }
+
         // safety: I am clearing this Vec after calling this
         let message = match json::from_slice(partial_message.as_mut_slice()) {
             Ok(m) => m,
