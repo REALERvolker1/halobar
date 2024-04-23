@@ -8,41 +8,6 @@ pub use parser::parse;
 mod halotype;
 pub use halotype::*;
 
-/// The inner representation of a var string.
-#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize, Serialize)]
-pub struct Variable {
-    /// The variable name as a String
-    pub ident: String,
-    /// These segments are printed in order, joined with the value.
-    truthy: Vec<String>,
-    /// The default "placeholder" value to display when there is no value
-    pub falsy: String,
-}
-impl Variable {
-    /// Get the correct string to show when the variable is truthy
-    pub fn truthy(&self, value: &str) -> String {
-        if self.truthy.is_empty() {
-            return value.to_owned();
-        }
-
-        self.truthy.join(value)
-    }
-}
-
-/// An individual segment of a FormatVec
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-pub enum Segment {
-    /// A String to pass in, verbatim
-    Literal(String),
-    /// A variable, denoted with special syntax
-    Variable(Variable),
-}
-impl Default for Segment {
-    fn default() -> Self {
-        Self::Literal(Default::default())
-    }
-}
-
 /// A formatter struct whose keys correspond to variables in the format segments.
 ///
 /// ```

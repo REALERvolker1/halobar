@@ -63,16 +63,26 @@ pub fn parse<S: AsRef<str>>(interpolated_string: S) -> Result<FmtSegmentVec, For
                 }
             }
             '}' => match current_state {
+                // allow for {variable}
                 ParserState::VarIdent | ParserState::VarFalsy => {
+                    debug_assert!(current_variable.truthy.is_empty());
+                    // This case is only if the variable format is {var:falsy} or {var}. Thus current_truthy should always be empty
+                    current_variable.truthy.clear();
+                    current_variable.truthy.push(VarContentType::Value);
+
                     segments.push(Segment::Variable(take(&mut current_variable)));
                     current_state = ParserState::Literal;
                 }
                 ParserState::Literal => {
                     return Err(FormatStrError::InvalidSymbol(current_state, idx, character));
                 }
-                // allow for {variable}
                 ParserState::VarTruthy => {
-                    current_variable.truthy.push(take(&mut current_truthy));
+                    let item = if current_truthy.is_empty() {
+                        VarContentType::Value
+                    } else {
+                        take(&mut current_truthy).into()
+                    };
+                    current_variable.truthy.push(item);
                     segments.push(Segment::Variable(take(&mut current_variable)));
                     current_state = ParserState::Literal;
                 }
@@ -87,7 +97,9 @@ pub fn parse<S: AsRef<str>>(interpolated_string: S) -> Result<FmtSegmentVec, For
             }
             ':' => {
                 if current_state == ParserState::VarTruthy {
-                    current_variable.truthy.push(take(&mut current_truthy));
+                    current_variable
+                        .truthy
+                        .push(take(&mut current_truthy).into());
                     current_state = ParserState::VarFalsy;
                 } else {
                     push_char!(character);
@@ -95,7 +107,12 @@ pub fn parse<S: AsRef<str>>(interpolated_string: S) -> Result<FmtSegmentVec, For
             }
             '$' => {
                 if current_state == ParserState::VarTruthy {
-                    current_variable.truthy.push(take(&mut current_truthy));
+                    // push the stuff we have accumulated so far so we maintain order
+                    current_variable
+                        .truthy
+                        .push(take(&mut current_truthy).into());
+
+                    current_variable.truthy.push(VarContentType::Value);
                 } else {
                     push_char!(character);
                 }

@@ -1,5 +1,66 @@
 use super::*;
 
+/// An internal enum made to determine what type of content should go next in a variable
+#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+pub enum VarContentType {
+    /// Show the variable value
+    #[default]
+    Value,
+    /// Just a literal string
+    Literal(String),
+}
+impl VarContentType {
+    #[inline]
+    pub fn try_subst<'a>(&'a self, maybe_substitute: &'a str) -> &'a str {
+        match self {
+            Self::Value => maybe_substitute,
+            Self::Literal(l) => l.as_str(),
+        }
+    }
+}
+impl From<String> for VarContentType {
+    fn from(value: String) -> Self {
+        VarContentType::Literal(value)
+    }
+}
+
+/// The inner representation of a var string.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct Variable {
+    /// The variable name as a String
+    pub ident: String,
+    /// These segments are printed in order, joined with the value.
+    pub truthy: Vec<VarContentType>,
+    /// The default "placeholder" value to display when there is no value
+    pub falsy: String,
+    #[serde(skip)]
+    pub(crate) content_position: VarContentType,
+}
+impl Variable {
+    /// Get the correct string to show when the variable is truthy
+    pub fn truthy(&self, value: &str) -> String {
+        self.truthy
+            .iter()
+            .map(|t| t.try_subst(value))
+            .collect::<Vec<_>>()
+            .concat()
+    }
+}
+
+/// An individual segment of a FormatVec
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub enum Segment {
+    /// A String to pass in, verbatim
+    Literal(String),
+    /// A variable, denoted with special syntax
+    Variable(Variable),
+}
+impl Default for Segment {
+    fn default() -> Self {
+        Self::Literal(Default::default())
+    }
+}
+
 /// A raw String that contains special syntax for formatting
 #[derive(
     Debug,
