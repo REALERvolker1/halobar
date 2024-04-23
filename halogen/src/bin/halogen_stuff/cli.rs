@@ -1,5 +1,5 @@
 use super::*;
-use clap::{Parser, ValueEnum};
+use clap::{Parser, Subcommand, ValueEnum};
 use once_cell::sync::Lazy;
 use tracing::Level;
 
@@ -8,12 +8,25 @@ pub static CLI: Lazy<Cli> = Lazy::new(|| Cli::parse());
 #[derive(Debug, Parser)]
 #[command(version, author, about, long_about = None)]
 pub struct Cli {
-    /// Set the logging level and verbosity
-    #[arg(short, long, verbatim_doc_comment)]
+    #[arg(short, long, help = "Set the logging level and verbosity")]
     pub log_level: LogLevel,
-    /// Manually override the socket path for debugging purposes(not recommended)
-    #[arg(long, verbatim_doc_comment)]
+    #[arg(
+        long,
+        help = "Manually override the socket path for debugging purposes (not recommended)"
+    )]
     pub socket_path: Option<PathBuf>,
+    #[arg(
+        long,
+        help = "Start halogen in SERVER mode",
+        long_help = "Start halogen in SERVER mode. Please note that there can only be one server per socket!"
+    )]
+    pub server: bool,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum Command {
+    Server,
+    Msg {},
 }
 
 #[derive(Debug, Default, Clone, Copy, ValueEnum)]

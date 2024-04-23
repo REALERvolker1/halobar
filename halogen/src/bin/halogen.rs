@@ -24,13 +24,11 @@ fn main() -> halogen_stuff::R<()> {
     }
 
     let future = async move {
-        let (mut server, stub) = halogen::interface::Interface::new().await?;
+        let (mut interface, stub) = halogen::interface::Interface::new().await?;
 
-        let server_handle = tokio::spawn(async move { server.server().await });
+        let server_handle = tokio::spawn(async move {});
 
-        // safety: trust me bro
-        server_handle.await.unwrap()?;
-        Ok::<_, halogen::Error>(())
+        halogen_stuff::async_main().await
     };
 
     tokio::runtime::Builder::new_current_thread()

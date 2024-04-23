@@ -182,6 +182,7 @@ fn remove_socket(socket: &Path, interface_state: InterfaceState) -> Result<(), E
 ///
 /// This is very similar to [`crate::SenderType`] but it fulfills a different purpose
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bin", derive(clap::ValueEnum))]
 pub enum InterfaceType {
     Client,
     Server,

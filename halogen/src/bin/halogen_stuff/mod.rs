@@ -16,16 +16,10 @@ pub async fn async_main() -> R<()> {
 }
 
 /// ONLY CALL THIS IF THE INTERFACE IS A SERVER!!!
-async fn server_signal_handler(interface: halogen::interface::InterfaceStub) -> R<()> {
+pub async fn server_signal_handler(interface: halogen::interface::InterfaceStub) -> ! {
     macro_rules! signals {
         ($( $sigtype:tt ),+) => {
             [$( (::tokio::signal::unix::SignalKind::$sigtype(), stringify!($sigtyp)) ),+]
-            // [$(async move { let $sigtype = ::tokio::signal::unix::signal(::tokio::signal::unix::SignalKind::$sigtype()); Ok::<_, Report>(())}),+]
-            // tokio::select! {
-                // Some(_) = s => {
-                    // warn!(concat!("Received signal: ", stringify!($sigtype)))
-                // }
-            // }::tokio::signal::unix::signal()?
         };
     }
     let mut signals = signals![interrupt, quit, terminate]
@@ -48,7 +42,7 @@ async fn server_signal_handler(interface: halogen::interface::InterfaceStub) -> 
         .into_iter()
         .collect::<FuturesUnordered<_>>();
 
-    signals.next().await;
-
-    bail!("Signal handler returned!")
+    loop {
+        signals.next().await;
+    }
 }
