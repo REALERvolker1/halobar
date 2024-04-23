@@ -6,6 +6,10 @@ pub use v1::*;
 /// The byte that is prepended to all messages, denoting the API version
 pub const LATEST_API_VERSION: u8 = 1;
 
+#[cfg(feature = "halobar_integration")]
+/// Both halobar and halogen-cli require tracing-subscriber and the contents of this subcrate
+pub mod halobar_integration;
+
 /// An internal library for stuff imported from other crates
 #[cfg(feature = "bin")]
 pub mod imports;
