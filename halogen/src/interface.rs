@@ -1,13 +1,16 @@
-use std::{path::Path, sync::atomic::AtomicU16};
+use futures_util::{stream::FuturesOrdered, TryStreamExt};
 
 use crate::imports::*;
+
+/// The max size of the chunks that I read from the socket
+const BUFFER_SIZE: usize = 2048;
 
 /// The interface for a socket. This should be a singleton.
 #[derive(Debug)]
 pub struct Interface {
     socket_path: Arc<PathBuf>,
     state: InterfaceState,
-    my_receiver: Arc<flume::Receiver<Message>>,
+    sock_receiver: Arc<flume::Receiver<Message>>,
     sub_sender: Arc<flume::Sender<Message>>,
 }
 impl Interface {
@@ -26,13 +29,13 @@ impl Interface {
         // let stream = UnixStream::connect(&socket_path).await?;
         // let socket = UnixListener::bind(&socket_path)?;
 
-        let (s, my_receiver) = flume::unbounded();
+        let (s, sock_receiver) = flume::unbounded();
         let (sub_sender, sr) = flume::unbounded();
 
         let me = Self {
             socket_path: Arc::clone(&socket_path),
             state,
-            my_receiver: Arc::new(my_receiver),
+            sock_receiver: Arc::new(sock_receiver),
             sub_sender: Arc::new(sub_sender),
         };
 
@@ -55,7 +58,7 @@ impl Interface {
         let stream = UnixStream::connect(self.path()).await?;
 
         let owned_sender = Arc::clone(&self.sub_sender);
-        let owned_receiver = Arc::clone(&self.my_receiver);
+        let owned_receiver = Arc::clone(&self.sock_receiver);
 
         tokio::try_join!(
             Self::read_socket_forever(owned_sender, &stream),
@@ -88,7 +91,7 @@ impl Interface {
                 address.as_pathname()
             );
             let owned_sender = Arc::clone(&self.sub_sender);
-            let owned_receiver = Arc::clone(&self.my_receiver);
+            let owned_receiver = Arc::clone(&self.sock_receiver);
             let handle = tokio::spawn(async move {
                 let res = tokio::try_join!(
                     Self::read_socket_forever(owned_sender, &stream),
@@ -133,7 +136,6 @@ impl Interface {
         sender: Arc<flume::Sender<Message>>,
         stream: &UnixStream,
     ) -> Result<(), Error> {
-        const BUFFER_SIZE: usize = 2048;
         let mut line_buffer = Vec::with_capacity(BUFFER_SIZE);
 
         loop {
@@ -208,10 +210,7 @@ unsafe fn drop_socket_path_inner(socket_path: &Path) {
             );
         }
     } else {
-        debug!(
-            "Interface removed socket path: {}",
-            socket_path.display()
-        );
+        debug!("Interface removed socket path: {}", socket_path.display());
     }
 }
 
@@ -275,4 +274,68 @@ impl InterfaceStub {
     pub unsafe fn drop_path(&self) {
         drop_socket_path_inner(&self.socket_path)
     }
+}
+
+/// If you use this in more than one spot in the code I will shank you
+///
+/// Format the message properly to be sent over the wire
+///
+/// Trust me, you don't wanna know any more than this.
+fn format_message_for_sender(message: &Message) -> Result<Vec<u8>, json::Error> {
+    let mut buffer = json::to_vec(message)?;
+
+    // insert the API version as the first byte. This is so that I don't have to retry parsing 5 times for 5 different versions.
+    buffer.insert(0, crate::LATEST_API_VERSION);
+    // null-terminated strings in rust?????? (I didn't want to do this but I had no choice)
+    buffer.push(0);
+    Ok(buffer)
+}
+
+/// If you use this in more than one spot in the code I will shank you
+///
+/// This takes the sender because it is an internal API and I don't want to allocate a buffer just to pass data
+/// into something that was just going to pass the data somewhere else.
+///
+/// This takes a mutable Vec that is supposed to be a temp buffer, storing part of the line. Don't touch it, it is there so I
+/// don't allocate a shit ton of RAM.
+///
+/// chillax, it's an internal API
+async fn deserialize_bytes(
+    partial_message: &mut Vec<u8>,
+    bytes: [u8; BUFFER_SIZE],
+    sender: &flume::Sender<Message>,
+) -> Result<(), Error> {
+    // TODO: Test if this actually maintains order in this case
+    let mut sends = FuturesOrdered::new();
+    for byte in bytes {
+        if byte != 0 {
+            partial_message.push(byte);
+            continue;
+            // ends this iteration early so I don't have to indent this all the way to Saturn
+        }
+        partial_message.reverse();
+        let api_version = partial_message.pop().ok_or(Error::InvalidApiVersion(0))?;
+        partial_message.reverse();
+        // safety: I am clearing this Vec after calling this
+        let message = match json::from_slice(partial_message.as_mut_slice()) {
+            Ok(m) => m,
+            Err(e) => {
+                warn!("Halogen server json decoding error: {e}");
+                // it isn't the end of the world, it's just one message
+                continue;
+            }
+        };
+        partial_message.clear();
+
+        // TODO: Filter message based on preferences. If it came from a server, client, or any
+
+        sends.push_back(sender.send_async(message))
+    }
+
+    loop {
+        if sends.try_next().await?.is_none() {
+            break;
+        }
+    }
+    Ok(())
 }

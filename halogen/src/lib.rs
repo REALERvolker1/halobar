@@ -1,7 +1,10 @@
 /// API version 1
 pub mod v1;
+
 /// Use the current version's definitions
 pub use v1::*;
+/// The byte that is prepended to all messages, denoting the API version
+pub const LATEST_API_VERSION: u8 = 1;
 
 /// An internal library for stuff imported from other crates
 mod imports;
@@ -79,7 +82,10 @@ pub enum Error {
     RecvError,
     /// An error joining a task
     JoinError(tokio::task::JoinError),
+    /// The current interface state is invalid -- maybe a client trying to be a server??
     InvalidState(interface::InterfaceState),
+    /// Received a message from an unknown API version
+    InvalidApiVersion(u8),
     /// Other errors that don't really fit well
     Internal(&'static str),
 }
@@ -96,6 +102,7 @@ impl std::fmt::Display for Error {
             Self::RecvError => "Error receiving message from channel".fmt(f),
             Self::JoinError(e) => e.fmt(f),
             Self::InvalidState(s) => write!(f, "Invalid interface state: {s:?}"),
+            Self::InvalidApiVersion(v) => write!(f, "Invalid API version: {v}"),
             Self::Internal(e) => e.fmt(f),
         }
     }

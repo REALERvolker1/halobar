@@ -2,7 +2,7 @@ pub use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 pub use crate::{Error, Message};
 
-pub use std::{convert::Infallible, path::PathBuf, str::FromStr, sync::Arc};
+pub use std::{convert::Infallible, path::{Path, PathBuf}, str::FromStr, sync::Arc};
 
 pub use ahash::{HashMap, HashMapExt};
 pub use futures_util::StreamExt;
@@ -18,10 +18,9 @@ pub use tracing::{debug, error, instrument, trace, warn};
 // }
 
 #[cfg(feature = "serde_json")]
-pub use serde_json::to_string;
-
+pub use serde_json as json;
 #[cfg(feature = "simd-json")]
-pub use simd_json::to_string;
+pub use simd_json as json;
 
 #[cfg(feature = "serde_json")]
 #[inline]

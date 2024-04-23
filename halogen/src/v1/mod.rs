@@ -159,7 +159,7 @@ impl Message {
     /// Serialize this message into json fit to send to the socket.
     #[instrument(level = "trace", skip_all)]
     pub fn into_json(&self) -> Result<String, Error> {
-        let out = to_string(self)?;
+        let out = json::to_string(self)?;
         Ok(out)
     }
     #[inline]
@@ -231,8 +231,9 @@ impl std::fmt::Display for Status {
 mod tests {
     use super::*;
 
-    use crate::imports::{from_bytes, to_string};
+    use crate::imports::{from_bytes, json::to_string};
 
+    /// TODO: This test is outdated
     #[test]
     fn deserialize_variants() {
         let mut variants = HashMap::new();
