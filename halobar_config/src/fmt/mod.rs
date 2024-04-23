@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::{convert::Infallible, mem::take, str::FromStr};
+use std::{borrow::Borrow, convert::Infallible, mem::take, str::FromStr};
 
 mod error;
 pub use error::FormatStrError;
@@ -161,22 +161,28 @@ pub enum ParserState {
 // }
 
 /// A formatter struct whose keys correspond to variables in the format segments.
-pub trait HaloFormatter {
+pub trait HaloFormatter<const N: usize> {
     /// The type of data that this formatter will format
     type Data;
     /// Get the fields of the required data type -- the possible variable placeholders
-    fn fields() -> &'static [&'static str];
+    fn fn_table<'a>(&'a self) -> FnTable<Self::Data, N>;
+    /// Get the current segment iterator
+    fn segments<'s>(&'s self) -> FmtSegments<'s>;
+    /// Get a sane default format str for this variable
+    fn default_format_str() -> FormatStr;
+    /// Extract the current data
+    fn current_data<'a>(&'a self) -> &'a Self::Data;
+    /// Replace the current data with new data
+    fn set_data(&mut self, data: Self::Data);
     /// Get a map of the fields of this struct that are contained in the [`FmtSegments`].
-    /// Each key corresponds to a boolean that denotes if the field is contained within the Segments.
+    /// This is helpful for ignoring fields that you do not need to query, for example.
     ///
     /// Implementation detail: This does not have to be manually implemented.
-    /// ```
-    /// ```
-    fn variable_map<'b>(segments: FmtSegments<'b>) -> Result<Vec<&'static str>, FormatStrError> {
-        let keys = Self::fields();
+    fn variable_map<'b>(&self) -> Result<Vec<&'static str>, FormatStrError> {
+        let keys = self.fn_table().0.map(|(k, _)| k);
         let mut map = Vec::new();
 
-        let variables = segments.filter_map(|s| match s {
+        let variables = self.segments().filter_map(|s| match s {
             Segment::Literal(_) => None,
             Segment::Variable(v) => Some(&v.ident),
         });
@@ -184,8 +190,8 @@ pub trait HaloFormatter {
         for var in variables {
             let varstr = var.as_str();
             for key in keys {
-                if varstr == *key {
-                    map.push(*key)
+                if varstr == key {
+                    map.push(key)
                 }
             }
         }
@@ -193,35 +199,117 @@ pub trait HaloFormatter {
         Ok(map)
     }
     /// Parse some segments, determining what to print. This takes data and determines how it should print.
-    fn format(&self, data: Self::Data, segments: FmtSegments) -> Result<String, FormatStrError>;
-    /// Get a sane default format str for this variable
-    fn default_format_str() -> FormatStr;
+    ///
+    /// Implementation detail: This does not have to be manually implemented.
+    fn format(&self) -> Result<String, FormatStrError> {
+        let segments = self.segments();
+        let fn_table = self.fn_table();
+        let data = self.current_data();
+
+        let mut out = String::new();
+
+        for segment in segments {
+            match segment {
+                Segment::Literal(l) => out.push_str(l),
+                Segment::Variable(v) => {
+                    for (key, function) in fn_table.0 {
+                        if v.ident == *key {
+                            if let Some(s) = function(data) {
+                                out.push_str(&v.truthy(&s))
+                            } else {
+                                out.push_str(&v.falsy)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(out)
+    }
 }
 
-// pub struct Data {
-//     value: u8,
-// }
+/// An array of keys and functions used for the formatter inner function input
+#[derive(Debug)]
+pub struct FnTable<T, const N: usize>(pub [(&'static str, fn(&T) -> Option<String>); N]);
+impl<T, const N: usize> FnTable<T, N> {
+    #[inline(always)]
+    fn copy(&self) -> Self {
+        Self(self.0)
+    }
+}
 
-// pub struct DataFormatter {
-//     pub value: Data,
-//     segments: FmtSegmentVec,
-// }
-// impl HaloFormatter for DataFormatter {
-//     type Data = Data;
-//     fn fields() -> &'static [&'static str] {
-//         &["value"]
-//     }
-//     fn default_format_str() -> FormatStr {
-//         "Value {value?is $ percent:is empty}".to_owned().into()
-//     }
-//     fn format(&self, data: Self::Data, segments: FmtSegments) -> Result<String, FormatStrError> {
-//         haloformatter_format! {
-//             segments;
-//             value: {
-//                 if data.value > 0 {
+#[derive(Debug, Default)]
+pub struct Data {
+    value: u8,
+    other_value: bool,
+}
 
-//                 }
-//             },
-//         }
-//     }
-// }
+pub struct DataFormatter {
+    data: Data,
+    segments: FmtSegmentVec,
+    fn_table: FnTable<Data, 2>,
+}
+impl DataFormatter {
+    pub fn new(initial_data: Data, segments: FmtSegmentVec) -> Self {
+        Self {
+            data: initial_data,
+            segments,
+            fn_table: FnTable([
+                ("value", |d| {
+                    if d.value > 0 {
+                        return Some(d.value.to_string());
+                    }
+                    None
+                }),
+                ("other_value", |d| {
+                    if d.other_value {
+                        return Some(d.other_value.to_string());
+                    }
+                    None
+                }),
+            ]),
+        }
+    }
+}
+
+impl HaloFormatter<2> for DataFormatter {
+    type Data = Data;
+    fn fn_table<'a>(&'a self) -> FnTable<Self::Data, 2> {
+        self.fn_table.copy()
+    }
+    fn current_data<'a>(&'a self) -> &'a Self::Data {
+        &self.data
+    }
+    fn set_data(&mut self, data: Self::Data) {
+        self.data = data
+    }
+    fn segments<'s>(&'s self) -> FmtSegments<'s> {
+        self.segments.segments()
+    }
+    fn default_format_str() -> FormatStr {
+        "Value {value?is $ percent:is empty}, other_value {other_value?is true:was not true}"
+            .to_owned()
+            .into()
+    }
+}
+
+fn main() {
+    let format_string = DataFormatter::default_format_str().parse().unwrap();
+    let mut formatter = DataFormatter::new(Data::default(), format_string);
+
+    let false_formatted = formatter.format().unwrap();
+
+    let new_data = Data {
+        value: 9,
+        other_value: true,
+    };
+    formatter.set_data(new_data);
+
+    let true_formatted = formatter.format().unwrap();
+}
+
+// FnTable([("value", |s, v, d| {}), ("other_value", |s, v, d| {})])
+fn yuerkgbhk() {
+    panic!("hi");
+}
