@@ -3,15 +3,15 @@
 fn main() {}
 
 #[cfg(feature = "bin")]
-pub mod halogen_stuff;
+pub mod cli;
 
 #[cfg(feature = "bin")]
-fn main() -> halogen_stuff::R<()> {
+fn main() -> cli::R<()> {
     use std::io::IsTerminal;
 
     color_eyre::install()?;
 
-    if let Some(log_level) = halogen_stuff::cli::CLI.log_level.tracing() {
+    if let Some(log_level) = cli::cli::CLI.log_level.tracing() {
         let logger = tracing_subscriber::FmtSubscriber::builder()
             .with_max_level(log_level)
             .pretty()
@@ -28,7 +28,7 @@ fn main() -> halogen_stuff::R<()> {
 
         let server_handle = tokio::spawn(async move {});
 
-        halogen_stuff::async_main().await
+        cli::async_main().await
     };
 
     tokio::runtime::Builder::new_current_thread()

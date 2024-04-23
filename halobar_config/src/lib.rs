@@ -78,6 +78,8 @@ pub enum Error {
     Io(io::Error),
     /// An error deserializing into a struct
     Deserialize(toml_edit::de::Error),
+    /// An error that occured while dealing with fmtstrs
+    Fmt(fmt::FormatStrError),
 }
 
 #[cfg(test)]

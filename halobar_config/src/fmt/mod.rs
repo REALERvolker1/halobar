@@ -103,6 +103,7 @@ pub trait HaloFormatter<const N: usize> {
     /// This is helpful for ignoring fields that you do not need to query, for example.
     ///
     /// Implementation detail: This does not have to be manually implemented.
+    #[tracing::instrument(level = "trace", skip_all)]
     fn variable_map<'b>(&self) -> Result<Vec<&'static str>, FormatStrError> {
         let keys = self.fn_table().0.map(|(k, _)| k);
         let mut map = Vec::new();

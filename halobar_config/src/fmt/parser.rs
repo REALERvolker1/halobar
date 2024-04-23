@@ -16,6 +16,7 @@ pub enum ParserState {
 /// Parse a variable string
 ///
 /// Refer to [`HaloFormatter`] for more information, including format syntax.
+#[tracing::instrument(level = "trace", skip_all)]
 pub fn parse<S: AsRef<str>>(interpolated_string: S) -> Result<FmtSegmentVec, FormatStrError> {
     let input_str = interpolated_string.as_ref();
 
@@ -40,11 +41,6 @@ pub fn parse<S: AsRef<str>>(interpolated_string: S) -> Result<FmtSegmentVec, For
                 ParserState::VarFalsy => current_variable.falsy.push($character),
             }
         };
-        ($character:expr => $collect:expr) => {
-            min_length = min_length.saturating_add(1);
-            is_escaped = false;
-            $collect.push($character)
-        };
     }
 
     for (idx, character) in input_str.chars().enumerate() {
@@ -63,13 +59,15 @@ pub fn parse<S: AsRef<str>>(interpolated_string: S) -> Result<FmtSegmentVec, For
                 }
             }
             '}' => match current_state {
-                // allow for {variable}
-                ParserState::VarIdent | ParserState::VarFalsy => {
+                ParserState::VarIdent => {
+                    // This case is only if the variable format is {var}. Thus current_truthy should always be empty
                     debug_assert!(current_variable.truthy.is_empty());
-                    // This case is only if the variable format is {var:falsy} or {var}. Thus current_truthy should always be empty
-                    current_variable.truthy.clear();
                     current_variable.truthy.push(VarContentType::Value);
 
+                    segments.push(Segment::Variable(take(&mut current_variable)));
+                    current_state = ParserState::Literal;
+                }
+                ParserState::VarFalsy => {
                     segments.push(Segment::Variable(take(&mut current_variable)));
                     current_state = ParserState::Literal;
                 }
