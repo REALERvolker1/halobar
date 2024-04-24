@@ -6,8 +6,24 @@ pub use tracing::info;
 
 pub type R<T> = color_eyre::Result<T>;
 
-pub async fn async_main() -> R<()> {
-    Ok(())
+pub async fn async_main(cli: cli::Cli) -> R<()> {
+    let (mut interface, stub) =
+        halogen::interface::Interface::new(cli.logconfig.logfile.as_deref()).await?;
+
+    let server_handle = tokio::spawn(async move {
+        if cli.server {
+            match interface.server().await {
+                Ok(()) => tracing::error!("Server ended early!"),
+                Err(e) => tracing::error!("Server error: {e}"),
+            }
+            panic!("Server loop quit unexpectedly!");
+        }
+    });
+
+    info!("{:#?}", cli);
+
+    server_handle.await?;
+    Ok::<(), color_eyre::eyre::Report>(())
 }
 
 /// ONLY CALL THIS IF THE INTERFACE IS A SERVER!!!

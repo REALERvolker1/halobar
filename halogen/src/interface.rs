@@ -65,6 +65,10 @@ impl Interface {
     pub async fn client(&mut self) -> Result<(), Error> {
         self.state.try_as(InterfaceType::Client)?;
 
+        if !self.path().exists() {
+            return Err(Error::InvalidSocketPath(self.path().to_owned()));
+        }
+
         let stream = UnixStream::connect(self.path()).await?;
 
         let owned_sender = Arc::clone(&self.sub_sender);
