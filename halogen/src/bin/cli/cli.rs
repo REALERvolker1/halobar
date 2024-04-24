@@ -8,7 +8,7 @@ pub static CLI: Lazy<Cli> = Lazy::new(|| Cli::parse());
 #[command(version, author, about, long_about = None)]
 pub struct Cli {
     #[command(flatten)]
-    pub logconfig: halogen::halobar_integration::LogConfig,
+    pub logconfig: halogen::complete::LogConfig,
     #[arg(
         long,
         help = "Manually override the socket path for debugging purposes (not recommended)"
@@ -20,6 +20,13 @@ pub struct Cli {
         long_help = "Start halogen in SERVER mode. Please note that there can only be one server per socket!"
     )]
     pub server: bool,
+}
+impl Cli {
+    pub fn new() -> Self {
+        let mut me = Self::parse();
+
+        me
+    }
 }
 
 #[derive(Debug, Subcommand)]

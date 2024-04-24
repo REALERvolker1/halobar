@@ -26,9 +26,6 @@ impl Interface {
 
         let socket_path = Arc::new(socket_path);
 
-        // let stream = UnixStream::connect(&socket_path).await?;
-        // let socket = UnixListener::bind(&socket_path)?;
-
         let (s, sock_receiver) = flume::unbounded();
         let (sub_sender, sr) = flume::unbounded();
 

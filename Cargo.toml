@@ -142,7 +142,7 @@ nix = { workspace = true }
 
 halobar_core = { workspace = true }
 halobar_config = { workspace = true }
-halogen = { workspace = true, features = ["bin", "halobar_integration"] }
+halogen = { workspace = true, features = ["bin", "complete"] }
 
 # monoio = { version = "0.2.3", features = [
 #     "zero-copy",

@@ -6,9 +6,9 @@ pub use v1::*;
 /// The byte that is prepended to all messages, denoting the API version
 pub const LATEST_API_VERSION: u8 = 1;
 
-#[cfg(feature = "halobar_integration")]
+#[cfg(feature = "complete")]
 /// Both halobar and halogen-cli require tracing-subscriber and the contents of this subcrate
-pub mod halobar_integration;
+pub mod complete;
 
 /// An internal library for stuff imported from other crates
 #[cfg(feature = "bin")]
@@ -29,11 +29,14 @@ use std::{env, path::PathBuf};
 ///
 /// First tries the environment variable `${HALOGEN_SOCK}`, then tries
 /// `${XDG_RUNTIME_DIR}/halogen/halogen${XDG_SESSION_ID}.sock`
+///
+/// This accepts an optional provided path simply because the halogen cli has
+/// an option that lets you override the logging path, and you may want to do so.
 pub fn get_socket_path() -> Result<PathBuf, Error> {
     if let Some(env_path) = env::var_os("HALOGEN_SOCK") {
         let env_path = PathBuf::from(env_path);
         tracing::debug!(
-            "Loading path from environment variable HALOGEN_SOCK: {}",
+            "Loading socket path from environment variable HALOGEN_SOCK: {}",
             env_path.display()
         );
         return Ok(env_path);

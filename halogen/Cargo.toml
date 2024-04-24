@@ -40,12 +40,12 @@ simd-json = { version = "0.13", optional = true, features = ["known-key"] }
 default = ["simd-json"]
 
 # This isn't so much integration with halobar as it is just a few shared functions and enums
-bin = ["halobar_integration"]
+bin = ["complete"]
 
 serde_json = ["dep:serde_json"]
 simd-json = ["dep:simd-json"]
 
-halobar_integration = [
+complete = [
     "dep:tracing-subscriber",
     "dep:tracing-error",
     "dep:tracing-appender",
