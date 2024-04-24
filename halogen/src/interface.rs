@@ -14,10 +14,23 @@ pub struct Interface {
     sub_sender: Arc<flume::Sender<Message>>,
 }
 impl Interface {
-    #[instrument(level = "debug", skip_all)]
+    #[cfg(not(feature = "bin"))]
+    #[inline]
     pub async fn new() -> Result<(Self, InterfaceStub), Error> {
-        let socket_path = crate::get_socket_path()?;
+        Self::new_inner(crate::get_socket_path()?).await
+    }
+    #[cfg(feature = "bin")]
+    #[inline]
+    pub async fn new(maybe_path: Option<&Path>) -> Result<(Self, InterfaceStub), Error> {
+        let sock_path = match maybe_path {
+            Some(p) => p.to_path_buf(),
+            None => crate::get_socket_path()?,
+        };
+        Self::new_inner(sock_path).await
+    }
 
+    #[instrument(level = "debug")]
+    async fn new_inner(socket_path: PathBuf) -> Result<(Self, InterfaceStub), Error> {
         let state = if socket_path.exists() {
             InterfaceState::Potential(InterfaceType::Client)
         } else {

@@ -14,7 +14,8 @@ fn main() -> cli::R<()> {
     if CLI.server {}
 
     rt.block_on(async move {
-        let (mut interface, stub) = halogen::interface::Interface::new().await?;
+        let (mut interface, stub) =
+            halogen::interface::Interface::new(CLI.logconfig.logfile.as_deref()).await?;
 
         let server_handle = tokio::spawn(async move {});
 

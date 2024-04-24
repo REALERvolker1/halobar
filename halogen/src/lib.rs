@@ -54,20 +54,15 @@ pub fn get_socket_path() -> Result<PathBuf, Error> {
     }
     path.push("halogen");
 
-    let mut socket_name = "halosock".to_owned();
-
-    let session_id =
+    let xdg_session_id =
         env::var("XDG_SESSION_ID").map_err(|_| Error::InvalidEnviron("XDG_SESSION_ID"))?;
 
-    // make sure the path exists
+    // make sure the parent dir exists first
     if !path.is_dir() {
         std::fs::create_dir_all(&path)?;
     }
 
-    socket_name.push_str(&session_id);
-    socket_name.push_str(".sock");
-
-    path.push(socket_name);
+    path.push(format!("halosock-{xdg_session_id}.sock"));
 
     Ok(path)
 }
