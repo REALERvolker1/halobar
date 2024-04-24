@@ -5,17 +5,7 @@ use std::io::IsTerminal;
 fn main() -> cli::R<()> {
     color_eyre::install()?;
 
-    if let Some(log_level) = cli::cli::CLI.log_level.tracing() {
-        let logger = tracing_subscriber::FmtSubscriber::builder()
-            .with_max_level(log_level)
-            .pretty()
-            .with_ansi(std::io::stdout().is_terminal())
-            .with_target(true)
-            .with_thread_ids(true)
-            .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
-            .with_writer(|| std::io::stdout());
-        logger.init();
-    }
+    halogen::halobar_integration::init_log(&cli::cli::CLI.logconfig, []);
 
     let future = async move {
         let (mut interface, stub) = halogen::interface::Interface::new().await?;

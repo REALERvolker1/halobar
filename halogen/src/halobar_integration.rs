@@ -1,4 +1,5 @@
-use clap::Parser;
+use clap::{Args, ValueEnum};
+use once_cell::sync::OnceCell;
 use tracing::level_filters::LevelFilter;
 
 use crate::imports::*;
@@ -7,7 +8,7 @@ use std::io::IsTerminal;
 use tracing_subscriber::{fmt::format::FmtSpan, prelude::*};
 
 /// The configuration for logging
-#[derive(Debug, Default, Parser)]
+#[derive(Debug, Default, Args)]
 pub struct LogConfig {
     /// Set the verbosity of logging
     #[arg(verbatim_doc_comment, short, long, default_value_t = LogLevel::default())]
@@ -18,8 +19,6 @@ pub struct LogConfig {
     /// Log to file as well as output
     #[arg(verbatim_doc_comment, long)]
     pub logfile: Option<PathBuf>,
-    #[clap(skip)]
-    guard: Option<tracing_appender::non_blocking::WorkerGuard>,
 }
 
 /// The console output of my choice
@@ -28,6 +27,9 @@ pub fn console() -> std::io::Stdout {
     std::io::stdout()
 }
 
+static WORKER_GUARD: OnceCell<tracing_appender::non_blocking::WorkerGuard> = OnceCell::new();
+
+/// The maximum number of queued messages to keep before dropping
 pub const MAX_QUEUED_MESSAGES: usize = 64;
 
 #[cfg(debug_assertions)]
@@ -36,8 +38,10 @@ const FMT_SPAN_EVENTS: FmtSpan = FmtSpan::ACTIVE;
 const FMT_SPAN_EVENTS: FmtSpan = FmtSpan::ENTER;
 
 /// Initialize logging with tracing. This calls the global init function!
+///
+/// nice_targets is meant to be a const array.
 #[inline]
-pub fn init_log(config: &mut LogConfig) {
+pub fn init_log<const N: usize>(config: &LogConfig, nice_targets: [&str; N]) {
     let Some(tracing_level) = config.level.tracing() else {
         return;
     };
@@ -59,11 +63,7 @@ pub fn init_log(config: &mut LogConfig) {
 
     let subscriber = tracing_subscriber::filter::Targets::new()
         .with_default(config.level.level_filter())
-        .with_target("cosmic_text", nice_filter)
-        .with_target("iced", nice_filter)
-        .with_target("wgpu", nice_filter)
-        .with_target("zbus", nice_filter)
-        .with_target("zbus_xml", nice_filter)
+        .with_targets(nice_targets.map(|t| (t, nice_filter)))
         .with_subscriber(subscriber);
 
     let subscriber =
@@ -79,7 +79,9 @@ pub fn init_log(config: &mut LogConfig) {
                         .lossy(true)
                         .finish(f);
 
-                config.guard.replace(guard);
+                WORKER_GUARD
+                    .set(guard)
+                    .expect("Could not set the global tracing_appender worker guard!");
 
                 tracing_subscriber::fmt::layer()
                     .with_ansi(false)
@@ -118,7 +120,7 @@ pub fn init_log(config: &mut LogConfig) {
     strum_macros::Display,
     Serialize,
     Deserialize,
-    clap::ValueEnum,
+    ValueEnum,
 )]
 #[strum(serialize_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
@@ -157,7 +159,7 @@ impl ColorOption {
     strum_macros::EnumString,
     Serialize,
     Deserialize,
-    clap::ValueEnum,
+    ValueEnum,
 )]
 #[strum(serialize_all = "kebab-case")]
 pub enum LogLevel {

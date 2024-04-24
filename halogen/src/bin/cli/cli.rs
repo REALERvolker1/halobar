@@ -1,15 +1,14 @@
 use super::*;
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand};
 use once_cell::sync::Lazy;
-use tracing::Level;
 
 pub static CLI: Lazy<Cli> = Lazy::new(|| Cli::parse());
 
 #[derive(Debug, Parser)]
 #[command(version, author, about, long_about = None)]
 pub struct Cli {
-    #[arg(short, long, help = "Set the logging level and verbosity")]
-    pub log_level: LogLevel,
+    #[command(flatten)]
+    pub logconfig: halogen::halobar_integration::LogConfig,
     #[arg(
         long,
         help = "Manually override the socket path for debugging purposes (not recommended)"
@@ -27,31 +26,4 @@ pub struct Cli {
 pub enum Command {
     Server,
     Msg {},
-}
-
-#[derive(Debug, Default, Clone, Copy, ValueEnum)]
-pub enum LogLevel {
-    Quiet,
-    Error,
-    Warn,
-    #[default]
-    Info,
-    Debug,
-    Trace,
-}
-impl LogLevel {
-    /// Get this as a Tracing level
-    #[inline]
-    pub const fn tracing(&self) -> Option<Level> {
-        let level = match self {
-            Self::Quiet => return None,
-            Self::Error => Level::ERROR,
-            Self::Warn => Level::WARN,
-            Self::Info => Level::INFO,
-            Self::Debug => Level::DEBUG,
-            Self::Trace => Level::TRACE,
-        };
-
-        Some(level)
-    }
 }
