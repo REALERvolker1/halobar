@@ -108,65 +108,53 @@ impl Variant {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// A message payload sent from either the server to the client, or client to the server
+///
+/// The Version information is sent as the first byte of the bytevec
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Message {
-    /// The API version that created this Message
-    version: u8,
     /// The current status. Signifies the current state of things.
     pub status: Status,
     /// The type of sender that sent this message
-    sender_type: SenderType,
+    pub sender_type: Target,
     /// The name of this message
-    pub name: String,
-    /// Inner data payload
-    pub data: HashMap<String, Variant>,
-}
-impl Default for Message {
-    fn default() -> Self {
-        Self::new(
-            Status::default(),
-            SenderType::All,
-            String::new(),
-            HashMap::new(),
-        )
-    }
+    pub identifier: String,
+    // /// Inner data payload
+    // pub data: HashMap<String, Variant>,
+    /// The text to display (client)
+    pub display: String,
 }
 impl Message {
-    /// Create a new message directly. Not recommended to use -- instead, use the helper impls provided by dedicated interfaces.
-    #[instrument(level = "debug", skip_all)]
-    pub fn new<S: Into<String>>(
-        status: Status,
-        sender_type: SenderType,
-        name: S,
-        data: HashMap<String, Variant>,
-    ) -> Self {
-        Self {
-            version: 1,
-            status,
-            sender_type,
-            name: name.into(),
-            data,
+    pub const VERSION: u8 = 1;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Target {
+    /// Messages only sent to the server
+    Server {
+        display: Option<String>,
+        percent: Option<u8>,
+    },
+    /// Messages that are sent to the client
+    Client { event: Event },
+}
+impl Default for Target {
+    fn default() -> Self {
+        Self::Server {
+            display: None,
+            percent: None,
         }
-    }
-    #[inline]
-    pub const fn version(&self) -> u8 {
-        self.version
-    }
-    #[inline]
-    pub const fn sender_type(&self) -> SenderType {
-        self.sender_type
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub enum SenderType {
-    /// Messages only interpreted by the server
-    Server,
-    /// Messages that are only interpreted by the client
-    Client,
-    /// Messages that are sent to everyone everywhere
-    #[default]
-    All,
+/// Different events that the bar listens to that are sent to any clients that request events
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Event {
+    Click,
+    RightClick,
+    MiddleClick,
+    ScrollUp,
+    ScrollDown,
 }
 
 /// A general-purpose status
@@ -217,50 +205,3 @@ impl Status {
         }
     }
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-
-//     use crate::imports::{from_bytes, json::to_string};
-
-//     /// TODO: This test is outdated
-//     #[test]
-//     fn deserialize_variants() {
-//         let mut variants = HashMap::new();
-//         variants.insert(
-//             "string".to_owned(),
-//             Variant::String("Hello world!".to_owned()),
-//         );
-//         variants.insert("path".to_owned(), Variant::Path(PathBuf::from("/usr/bin")));
-//         variants.insert("bool".to_owned(), Variant::Bool(true));
-//         variants.insert("signed int".to_owned(), Variant::Iint(-673485));
-//         variants.insert("unsigned_int".to_owned(), Variant::Uint(678656397));
-//         variants.insert("float".to_owned(), Variant::Float(-3778.489));
-
-//         variants.insert(
-//             "vector".to_owned(),
-//             Variant::Vec(vec![
-//                 Box::new(Variant::Iint(-785)),
-//                 Box::new(Variant::String("Hello World".to_owned())),
-//             ]),
-//         );
-
-//         let mut map = HashMap::new();
-//         map.insert(
-//             "name".to_owned(),
-//             Box::new(Variant::String("Drew".to_owned())),
-//         );
-//         map.insert("age".to_owned(), Box::new(Variant::Uint(32)));
-
-//         variants.insert("map".to_owned(), Variant::Map(map));
-
-//         let mut json = to_string(&variants).unwrap();
-
-//         // safety: I know this is UTF-8
-//         let json_bytes = unsafe { json.as_bytes_mut() };
-//         let from_json: HashMap<String, Variant> = from_bytes(json_bytes).unwrap();
-
-//         assert_eq!(from_json, variants);
-//     }
-// }
