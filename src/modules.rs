@@ -5,7 +5,7 @@ use crate::prelude::*;
 pub async fn run(runtime: &tokio::runtime::Runtime) -> R<()> {
     // TODO: Make these in macros
     let time_config = time::TimeKnown::default();
-    let (time_module, mut time_channel) = time::Time::new((), time_config).await?;
+    let (mut time_module, mut time_channel) = time::Time::new((), time_config).await?;
 
     let mut my_receiver = time_channel.get_receiver().expect(const_format::formatcp!(
         "Failed to acquire {} receiver",
@@ -50,14 +50,10 @@ pub trait BackendModule: Sized {
         input: Self::Input,
         config: Self::Config,
     ) -> Result<(Self, BiChannel<Event, String>), Self::Error>;
-    /// Run this module. This function should be considered "blocking" and not return.
-    ///
-    /// In addition to module code, modules must listen to their channel's receiver.
-    async fn run(self) -> Result<(), Self::Error>;
-    /// The function that is called when this module receives an event.
-    ///
-    /// Remember to listen for these when you make the run function!
-    async fn receive_event(&mut self, event: Event) -> Result<(), Self::Error>;
+    /// Run this module. Whether this function loops forever, runs once, or is not run at all depends entirely on its module type.
+    async fn run(&mut self) -> Result<(), Self::Error>;
+    /// Listen for events with this module. Whether this function runs at all depends entirely on its module type.
+    async fn receive_event(&self, event: Event) -> Result<(), Self::Error>;
 }
 
 /// A two-way mpsc channel.

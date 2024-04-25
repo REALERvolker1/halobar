@@ -148,13 +148,15 @@ impl Default for Target {
 }
 
 /// Different events that the bar listens to that are sent to any clients that request events
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Event {
     Click,
     RightClick,
     MiddleClick,
     ScrollUp,
     ScrollDown,
+    #[default]
+    Noop,
 }
 
 /// A general-purpose status
