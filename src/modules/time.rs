@@ -8,7 +8,7 @@ config_struct! {
     [Time]
     format: String = "%I:%M:%S %P".to_owned(),
     format_alt: String = "%a, %m/%d @ %I:%M:%S %P".to_owned(),
-    interval: u64 = 750,
+    interval: u64 = 1000,
 }
 
 pub struct Time {
@@ -16,13 +16,13 @@ pub struct Time {
     format_alt: String,
     interval: Duration,
     channel: BiChannel<String, Event>,
-    state: FormatState,
-    last_event: RwLock<Event>,
+    state: RwLock<FormatState>,
 }
 impl BackendModule for Time {
     type Input = ();
     type Config = TimeKnown;
     type Error = TimeError;
+    #[instrument(level = "debug", skip_all)]
     async fn new(
         _input: Self::Input,
         config: Self::Config,
@@ -30,21 +30,21 @@ impl BackendModule for Time {
         let (channel, yours) =
             BiChannel::new(5, Some("Time module".into()), Some("Time receiver".into()));
 
+        // let (state_sender, state_receiver) = watch::channel(FormatState::default());
+
         let me = Self {
             format: config.format,
             format_alt: config.format_alt,
             interval: Duration::from_millis(config.interval),
             channel,
-            state: FormatState::default(),
-            last_event: RwLock::const_new(Event::default()),
+            state: RwLock::new(FormatState::Normal),
         };
         Ok((me, yours))
     }
     async fn run(&mut self) -> Result<(), Self::Error> {
         let mut receiver = self
             .channel
-            .receiver
-            .take()
+            .get_receiver()
             .expect("Time receiver was not found!");
         let event_receiver = async {
             while let Some(ev) = receiver.recv().await {
@@ -53,19 +53,21 @@ impl BackendModule for Time {
             rok![(), TimeError]
         };
         let operation = async {
+            let mut items = String::new();
             // TODO: Optimize this
             loop {
-                let time = chrono::Local::now();
-                let format = match self.state {
-                    FormatState::Normal => StrftimeItems::new(&self.format),
-                    FormatState::Alternate => StrftimeItems::new(&self.format_alt),
-                };
-
-                let items = time.format_with_items(format);
-
                 join!(
-                    self.channel.send(items.to_string()),
-                    tokio::time::sleep(self.interval)
+                    self.channel.send(items.clone()),
+                    tokio::time::sleep(self.interval),
+                    async {
+                        let format = match *self.state.read().await {
+                            FormatState::Normal => StrftimeItems::new(&self.format),
+                            FormatState::Alternate => StrftimeItems::new(&self.format_alt),
+                        };
+
+                        let time = chrono::Local::now();
+                        items = time.format_with_items(format).to_string();
+                    }
                 );
             }
         };
@@ -74,20 +76,24 @@ impl BackendModule for Time {
         r?;
         Ok(())
     }
+    #[instrument(level = "debug", skip(self))]
     async fn receive_event(&self, event: Event) -> Result<(), Self::Error> {
         match event {
             Event::Click | Event::MiddleClick | Event::RightClick => {
-                let mut write = self.last_event.write().await;
-                *write = event
+                let mut s = self.state.write().await;
+                s.next();
             }
+
             _ => {}
         }
         Ok(())
     }
+    #[inline]
+    fn module_type() -> ModuleType {
+        ModuleType::Loop
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum TimeError {
-    #[error("Invalid strftime format: {0}")]
-    InvalidStrftime(String),
-}
+#[error("Time error!")]
+pub struct TimeError;

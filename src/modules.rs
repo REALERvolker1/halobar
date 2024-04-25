@@ -23,6 +23,7 @@ pub async fn run(runtime: &tokio::runtime::Runtime) -> R<()> {
         Ok::<_, Report>(())
     });
 
+    tokio::task::block_in_place(|| loop {});
     Ok(())
 }
 
@@ -38,7 +39,7 @@ macro_rules! proxy {
 pub use proxy;
 
 /// A module that can be used in the backend to provide data.
-pub trait BackendModule: Sized {
+pub trait BackendModule: Sized + Send {
     /// The type of config that the module requires for user customization.
     type Config;
     /// The type of input that the module requires to create a new instance.
@@ -54,6 +55,8 @@ pub trait BackendModule: Sized {
     async fn run(&mut self) -> Result<(), Self::Error>;
     /// Listen for events with this module. Whether this function runs at all depends entirely on its module type.
     async fn receive_event(&self, event: Event) -> Result<(), Self::Error>;
+    /// Get this module's [`ModuleType`]. Ideally should be inlined.
+    fn module_type() -> ModuleType;
 }
 
 /// A two-way mpsc channel.
@@ -111,14 +114,14 @@ impl<T, F> BiChannel<T, F> {
 }
 
 /// An enum to assist modules that have multiple formatting states
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FormatState {
     #[default]
     Normal,
     Alternate,
 }
 impl FormatState {
-    /// Switch the current state to the next available
+    /// Switch the current state to the next available.
     pub fn next(&mut self) {
         let next = match self {
             Self::Normal => Self::Alternate,
@@ -126,4 +129,15 @@ impl FormatState {
         };
         *self = next;
     }
+}
+
+/// The type of module that this is. This determines a lot about how it is run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ModuleType {
+    /// The module returns a constant string through its channel on start, and is not run.
+    Constant,
+    /// The module is run once.
+    Oneshot,
+    /// The module runs in a loop, pushing changes through its channel. The run function should never exit.
+    Loop,
 }
