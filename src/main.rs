@@ -1,3 +1,6 @@
+#![allow(async_fn_in_trait)]
+
+pub mod modules;
 pub mod prelude;
 
 #[cfg(target_os = "linux")]
@@ -12,7 +15,11 @@ fn main() -> prelude::R<()> {
     let uname = nix::sys::utsname::uname()?;
     prelude::debug!("Running kernel {}", uname.release().to_string_lossy());
 
-    let f = async move { Ok::<_, prelude::Report>(()) };
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+
+    rt.block_on(modules::run(&rt))?;
 
     Ok(())
 }

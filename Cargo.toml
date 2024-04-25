@@ -47,6 +47,7 @@ paste = "1.0.14"
 konst = { version = "0.3.8", features = ["rust_latest_stable"] }
 smart-default = "0.7.1"
 const_format = { version = "0.2.32", features = ["rust_1_64"] }
+thiserror = "1.0.59"
 derive_more = { version = "0.99.17", default-features = false, features = [
     "try_into",
     "unwrap",
@@ -124,6 +125,7 @@ serde = { workspace = true }
 smallvec = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
+thiserror = { workspace = true }
 konst = { workspace = true }
 once_cell = { workspace = true }
 futures-util = { workspace = true }
@@ -143,6 +145,9 @@ nix = { workspace = true }
 halobar_core = { workspace = true }
 halobar_config = { workspace = true }
 halogen = { workspace = true, features = ["bin", "complete"] }
+
+chrono = { version = "0.4.38", default-features = false, features = ["std", "now", "clock"] }
+
 
 # monoio = { version = "0.2.3", features = [
 #     "zero-copy",
