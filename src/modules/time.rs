@@ -14,7 +14,7 @@ pub struct Time {
     format_alt: String,
     interval: Duration,
     channel: BiChannel<String, Event>,
-    state: RwLock<FormatState>,
+    state: Mutex<FormatState>,
 }
 impl BackendModule for Time {
     type Input = ();
@@ -35,7 +35,7 @@ impl BackendModule for Time {
             format_alt: config.format_alt,
             interval: Duration::from_millis(config.interval),
             channel,
-            state: RwLock::new(FormatState::Normal),
+            state: Mutex::const_new(FormatState::Normal),
         };
         Ok((me, yours))
     }
@@ -58,9 +58,11 @@ impl BackendModule for Time {
                     self.channel.send(items.clone()),
                     tokio::time::sleep(self.interval),
                     async {
-                        let format = match *self.state.read().await {
-                            FormatState::Normal => StrftimeItems::new(&self.format),
-                            FormatState::Alternate => StrftimeItems::new(&self.format_alt),
+                        let format = {
+                            match *self.state.lock().await {
+                                FormatState::Normal => StrftimeItems::new(&self.format),
+                                FormatState::Alternate => StrftimeItems::new(&self.format_alt),
+                            }
                         };
 
                         let time = chrono::Local::now();
@@ -77,11 +79,7 @@ impl BackendModule for Time {
     #[instrument(level = "debug", skip(self))]
     async fn receive_event(&self, event: Event) -> Result<(), Self::Error> {
         match event {
-            Event::Click | Event::MiddleClick | Event::RightClick => {
-                let mut s = self.state.write().await;
-                s.next();
-            }
-
+            Event::Click | Event::MiddleClick | Event::RightClick => self.state.lock().await.next(),
             _ => {}
         }
         Ok(())
