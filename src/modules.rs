@@ -23,6 +23,16 @@ pub async fn run(runtime: &tokio::runtime::Runtime) -> R<()> {
         Ok::<_, Report>(())
     });
 
+    let dura = Duration::from_secs(5);
+
+    runtime.spawn(async move {
+        loop {
+            tokio::time::sleep(dura).await;
+            let span = tracing::info_span!("Time channel send");
+            time_channel.send(Event::Click).instrument(span).await;
+        }
+    });
+
     tokio::task::block_in_place(|| loop {});
     Ok(())
 }
@@ -37,6 +47,7 @@ macro_rules! proxy {
     };
 }
 pub use proxy;
+use tracing::Instrument;
 
 /// A module that can be used in the backend to provide data.
 pub trait BackendModule: Sized + Send {

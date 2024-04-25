@@ -1,6 +1,4 @@
 use chrono::format::StrftimeItems;
-use halobar_config::config_struct;
-use tokio::sync::watch;
 
 use super::*;
 
@@ -94,6 +92,6 @@ impl BackendModule for Time {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-#[error("Time error!")]
+#[derive(Debug, derive_more::Error, derive_more::Display)]
+#[display(fmt = "Time error!")]
 pub struct TimeError;

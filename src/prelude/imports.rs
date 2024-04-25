@@ -2,6 +2,7 @@ pub(crate) use color_eyre::{
     eyre::{bail, eyre},
     Report,
 };
+pub(crate) use halobar_config::config_struct;
 pub(crate) use halogen::{Event, Message};
 pub(crate) use once_cell::sync::{Lazy, OnceCell};
 pub(crate) use serde::{Deserialize, Serialize};
