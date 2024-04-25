@@ -153,3 +153,18 @@ pub enum ModuleType {
     /// The module runs in a loop, pushing changes through its channel. The run function should never exit.
     Loop,
 }
+
+/// A wrapper for [`zbus::Connection`] that allows modules to specify the type of connection they require
+#[derive(Debug, Clone)]
+pub enum ConnectionType {
+    System(zbus::Connection),
+    Session(zbus::Connection),
+}
+impl ConnectionType {
+    pub fn get(self) -> zbus::Connection {
+        match self {
+            Self::Session(c) => c,
+            Self::System(c) => c,
+        }
+    }
+}

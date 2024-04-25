@@ -82,11 +82,6 @@ smallvec = { version = "1.13.2", features = ["serde", "const_new"] }
 once_cell = { version = "1.19.0", features = ["parking_lot"] }
 uuid = { version = "1.8.0", features = ["v4", "fast-rng", "serde", "zerocopy"] }
 regex = "1.10.4"
-chrono = { version = "0.4.38", default-features = false, features = [
-    "std",
-    "now",
-    "clock",
-] }
 ahash = { version = "0.8.11", features = [
     "serde",
     "no-rng",
@@ -94,6 +89,10 @@ ahash = { version = "0.8.11", features = [
 ], default-features = false }
 serde = { version = "1.0.197", features = ["rc", "derive"] }
 nix = { version = "0.28.0", features = ["fs", "user", "hostname"] }
+chrono = { version = "0.4.38", default-features = false, features = [
+    "std",
+    "clock",
+] }
 
 futures-util = "0.3.30"
 flume = { version = "0.11.0", default-features = false, features = ["async"] }
@@ -111,6 +110,9 @@ tokio = { version = "1.37.0", features = [
     "tracing",
     "test-util",
     "net",
+] }
+zbus = { git = "https://github.com/dbus2/zbus", version = "4.1.2", default-features = false, features = [
+    "tokio",
 ] }
 
 toml_edit = { version = "0.22.9", features = ["serde"] }
@@ -145,11 +147,12 @@ tracing-subscriber = { workspace = true }
 tracing-appender = { workspace = true }
 uuid = { workspace = true }
 nix = { workspace = true }
+chrono = { workspace = true }
 
 halobar_core = { workspace = true }
 halobar_config = { workspace = true }
 halogen = { workspace = true, features = ["bin", "complete"] }
-chrono = { workspace = true }
+zbus = { workspace = true }
 
 
 # monoio = { version = "0.2.3", features = [
