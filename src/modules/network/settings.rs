@@ -23,7 +23,8 @@ use zbus::proxy;
 #[proxy(
     interface = "org.freedesktop.NetworkManager.Settings",
     default_service = "org.freedesktop.NetworkManager",
-    default_path = "/org/freedesktop/NetworkManager/Settings"
+    default_path = "/org/freedesktop/NetworkManager/Settings",
+    gen_blocking = false,
 )]
 trait Settings {
     /// AddConnection method

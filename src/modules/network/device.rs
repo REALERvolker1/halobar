@@ -23,7 +23,8 @@ use zbus::proxy;
 #[proxy(
     interface = "org.freedesktop.NetworkManager.Device.Statistics",
     default_service = "org.freedesktop.NetworkManager",
-    default_path = "/org/freedesktop/NetworkManager/Devices/1"
+    default_path = "/org/freedesktop/NetworkManager/Devices/1",
+    gen_blocking = false,
 )]
 trait Statistics {
     /// RefreshRateMs property
@@ -64,7 +65,8 @@ trait Statistics {
 #[proxy(
     interface = "org.freedesktop.NetworkManager.Device",
     default_service = "org.freedesktop.NetworkManager",
-    default_path = "/org/freedesktop/NetworkManager/Devices/1"
+    default_path = "/org/freedesktop/NetworkManager/Devices/1",
+    gen_blocking = false,
 )]
 trait Device {
     /// Delete method

@@ -32,3 +32,5 @@ pub(crate) use tokio::{
     try_join,
 };
 pub(crate) use tracing::{debug, error, info, instrument, trace, warn};
+pub(crate) use zbus::{names as zbus_names, zvariant};
+pub(crate) use serde_repr::{Deserialize_repr, Serialize_repr};

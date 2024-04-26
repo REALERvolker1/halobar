@@ -23,7 +23,8 @@ use zbus::proxy;
 #[proxy(
     interface = "org.freedesktop.NetworkManager",
     default_service = "org.freedesktop.NetworkManager",
-    default_path = "/org/freedesktop/NetworkManager"
+    default_path = "/org/freedesktop/NetworkManager",
+    gen_blocking = false
 )]
 trait NetworkManager {
     /// ActivateConnection method
@@ -167,7 +168,7 @@ trait NetworkManager {
 
     /// Connectivity property
     #[zbus(property)]
-    fn connectivity(&self) -> zbus::Result<u32>;
+    fn connectivity(&self) -> zbus::Result<super::NMConnectivityState>;
 
     /// ConnectivityCheckAvailable property
     #[zbus(property)]

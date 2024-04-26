@@ -23,7 +23,8 @@ use zbus::proxy;
 #[proxy(
     interface = "org.freedesktop.NetworkManager.Connection.Active",
     default_service = "org.freedesktop.NetworkManager",
-    default_path = "/org/freedesktop/NetworkManager/ActiveConnection/1"
+    default_path = "/org/freedesktop/NetworkManager/ActiveConnection/1",
+    gen_blocking = false,
 )]
 trait Active {
     // /// StateChanged signal

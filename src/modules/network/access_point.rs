@@ -23,7 +23,8 @@ use zbus::proxy;
 #[proxy(
     interface = "org.freedesktop.NetworkManager.AccessPoint",
     default_service = "org.freedesktop.NetworkManager",
-    default_path = "/org/freedesktop/NetworkManager/AccessPoint/1"
+    default_path = "/org/freedesktop/NetworkManager/AccessPoint/1",
+    gen_blocking = false
 )]
 trait AccessPoint {
     /// Bandwidth property
