@@ -6,13 +6,24 @@ pub struct NetData {
     // pub ssid: Arc<String>,
     pub up_speed: u64,
     pub down_speed: u64,
+    pub is_online: bool,
 }
 
 struct FormatNet {
     data: NetData,
     /// TODO: Allow choosing decimal rounding
     format: FmtSegmentVec,
+    format_offline: FmtSegmentVec,
 }
+// impl HaloFormatter for FormatNet {
+//     type Data = NetData;
+//     fn current_data<'a>(&'a self) -> &'a Self::Data {
+//         &self.data
+//     }
+//     fn default_format_str() -> FormatStr {
+//         ""
+//     }
+// }
 
 // config_struct! {
 //     [Net]
@@ -22,12 +33,14 @@ struct FormatNet {
 pub struct Network {
     /// The device in /sys/class/net
     interface: Arc<String>,
-    tx_packets: PathBuf,
+
+    operstate_path: PathBuf,
+    tx_packets_path: PathBuf,
     rx_packets: PathBuf,
+
     last_data: NetData,
     // connection: zbus::Connection,
     channel: BiChannel<String, Event>,
-    is_connected: bool,
     last_checked: Instant,
 }
 impl Network {
@@ -58,6 +71,7 @@ impl Network {
         Ok(size_bytes)
     }
 }
+// impl BackendModule for Network
 
 #[derive(Debug, thiserror::Error)]
 pub enum NetError {
