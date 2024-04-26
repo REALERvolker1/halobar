@@ -700,3 +700,129 @@ pub enum NM80211ApSecurityFlags {
     KeyMgmtEAP = 0x00002000,
 }
 owned_repr!(NM80211ApSecurityFlags);
+
+/// [NMActiveConnectionState](https://networkmanager.dev/docs/api/latest/nm-dbus-types.html#NMActiveConnectionState)
+/// values indicate the state of a connection to a specific network while it is starting, connected, or disconnecting from that network.
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    zvariant::Type,
+    Deserialize_repr,
+    Serialize_repr,
+    strum_macros::FromRepr,
+    strum_macros::Display,
+)]
+#[repr(u32)]
+pub enum NMActiveConnectionState {
+    /// the state of the connection is unknown
+    #[default]
+    Unknown = 0,
+    /// a network connection is being prepared
+    Activating = 1,
+    /// there is a connection to the network
+    Activated = 2,
+    /// the network connection is being torn down and cleaned up
+    Deactivating = 3,
+    /// the network connection is disconnected and will be removed
+    Deactivated = 4,
+}
+owned_repr!(NMActiveConnectionState);
+
+/// Active connection state reasons.
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    zvariant::Type,
+    Deserialize_repr,
+    Serialize_repr,
+    strum_macros::FromRepr,
+    strum_macros::Display,
+)]
+#[repr(u32)]
+pub enum NMActiveConnectionStateReason {
+    /// The reason for the active connection state change is unknown.
+    #[default]
+    Unknown = 0,
+    /// No reason was given for the active connection state change.
+    None = 1,
+    /// The active connection changed state because the user disconnected it.
+    UserDisconnected = 2,
+    /// The active connection changed state because the device it was using was disconnected.
+    DeviceDisconnected = 3,
+    /// The service providing the VPN connection was stopped.
+    ServiceStopped = 4,
+    /// The IP config of the active connection was invalid.
+    IpConfigInvalid = 5,
+    /// The connection attempt to the VPN service timed out.
+    ConnectTimeout = 6,
+    /// A timeout occurred while starting the service providing the VPN connection.
+    ServiceStartTimeout = 7,
+    /// Starting the service providing the VPN connection failed.
+    ServiceStartFailed = 8,
+    /// Necessary secrets for the connection were not provided.
+    NoSecrets = 9,
+    /// Authentication to the server failed.
+    LoginFailed = 10,
+    /// The connection was deleted from settings.
+    ConnectionRemoved = 11,
+    /// Master connection of this connection failed to activate.
+    DependencyFailed = 12,
+    /// Could not create the software device link.
+    DeviceRealizeFailed = 13,
+    /// The device this connection depended on disappeared.
+    DeviceRemoved = 14,
+}
+owned_repr!(NMActiveConnectionStateReason);
+
+/// Flags describing the current activation state.
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    zvariant::Type,
+    Deserialize_repr,
+    Serialize_repr,
+    strum_macros::FromRepr,
+    strum_macros::Display,
+)]
+#[repr(u32)]
+pub enum NMActivationStateFlags {
+    /// an alias for numeric zero, no flags set.
+    #[default]
+    None = 0,
+    /// the device is a master.
+    IsMaster = 0x1,
+    /// the device is a slave.
+    IsSlave = 0x2,
+    /// layer2 is activated and ready.
+    Layer2Ready = 0x4,
+    /// IPv4 setting is completed.
+    IP4Ready = 0x8,
+    /// IPv6 setting is completed.
+    IP6Ready = 0x10,
+    /// The master has any slave devices attached. This only makes sense if the device is a master.
+    MasterHasSlaves = 0x20,
+    /// the lifetime of the activation is bound to the visibility of the connection profile,
+    /// which in turn depends on "connection.permissions" and whether a session for the user exists. Since: 1.16.
+    LifetimeBoundToProfileVisibility = 0x40,
+    /// the active connection was generated to represent an external configuration of a networking device. Since: 1.26.
+    External = 0x80,
+}
+owned_repr!(NMActivationStateFlags);
