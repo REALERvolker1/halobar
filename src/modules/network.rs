@@ -1,3 +1,9 @@
+mod access_point;
+mod active_connection;
+mod device;
+mod network_manager;
+mod settings;
+
 use super::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -34,42 +40,37 @@ pub struct Network {
     /// The device in /sys/class/net
     interface: Arc<String>,
 
-    operstate_path: PathBuf,
-    tx_packets_path: PathBuf,
-    rx_packets: PathBuf,
-
     last_data: NetData,
-    // connection: zbus::Connection,
+    connection: zbus::Connection,
     channel: BiChannel<String, Event>,
-    last_checked: Instant,
 }
 impl Network {
-    fn refresh(&mut self) -> Result<(), NetError> {
-        // I get that doing it in this order is a bit more innacurate, but I would rather overestimate than underestimate in this instance.
-        let last_checked = Instant::now();
-        let since_last = last_checked.duration_since(self.last_checked);
-        self.last_checked = last_checked;
-        let seconds = since_last.as_secs();
+    // fn refresh(&mut self) -> Result<(), NetError> {
+    //     // I get that doing it in this order is a bit more innacurate, but I would rather overestimate than underestimate in this instance.
+    //     let last_checked = Instant::now();
+    //     let since_last = last_checked.duration_since(self.last_checked);
+    //     self.last_checked = last_checked;
+    //     let seconds = since_last.as_secs();
 
-        let data = NetData {
-            up_speed: Self::speed_difference(seconds, self.last_data.up_speed, &self.tx_packets)?,
-            down_speed: Self::speed_difference(
-                seconds,
-                self.last_data.down_speed,
-                &self.rx_packets,
-            )?,
-        };
+    //     let data = NetData {
+    //         up_speed: Self::speed_difference(seconds, self.last_data.up_speed, &self.tx_packets)?,
+    //         down_speed: Self::speed_difference(
+    //             seconds,
+    //             self.last_data.down_speed,
+    //             &self.rx_packets,
+    //         )?,
+    //     };
 
-        Ok(())
-    }
-    /// Quick and dirty way to query one of the tx or rx things
-    fn speed_difference(time_seconds: u64, previous: u64, path: &Path) -> Result<u64, NetError> {
-        let current = fs::read_to_string(path)?.parse::<u64>()?;
-        let difference = current.saturating_sub(previous);
+    //     Ok(())
+    // }
+    // /// Quick and dirty way to query one of the tx or rx things
+    // fn speed_difference(time_seconds: u64, previous: u64, path: &Path) -> Result<u64, NetError> {
+    //     let current = fs::read_to_string(path)?.parse::<u64>()?;
+    //     let difference = current.saturating_sub(previous);
 
-        let size_bytes = difference / time_seconds;
-        Ok(size_bytes)
-    }
+    //     let size_bytes = difference / time_seconds;
+    //     Ok(size_bytes)
+    // }
 }
 // impl BackendModule for Network
 
