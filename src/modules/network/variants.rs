@@ -1,5 +1,8 @@
+//! A lot of this documentation was lifted from [networkmanager.dev].
+//!
+//! TODO: The enums with values of 0x.... are supposed to be merged sort of like drwxr--r-- signs on folders
+
 use super::*;
-use zvariant::Type;
 
 macro_rules! owned_repr {
     ($ty:ty) => {
@@ -285,6 +288,7 @@ owned_repr!(NMCapability);
     derive_more::AsRef,
     derive_more::Deref,
     derive_more::IntoIterator,
+    derive_more::From,
 )]
 pub struct NMCapabilityVec(pub Vec<NMCapability>);
 impl TryFrom<zvariant::OwnedValue> for NMCapabilityVec {
@@ -471,3 +475,228 @@ pub enum NMSettingsConnectionFlags {
     External = 0x08,
 }
 owned_repr!(NMSettingsConnectionFlags);
+
+/// The NMMetered enum has two different purposes:
+/// - one is to configure "connection.metered" setting of a connection profile in NMSettingConnection
+/// - the other is to express the actual metered state of the NMDevice at a given moment.
+///
+/// For the connection profile only NM_METERED_UNKNOWN, NM_METERED_NO and NM_METERED_YES are allowed.
+///
+/// The device's metered state at runtime is determined by the profile which is currently active.
+/// If the profile explicitly specifies NM_METERED_NO or NM_METERED_YES, then the device's metered state is as such.
+/// If the connection profile leaves it undecided at NM_METERED_UNKNOWN (the default), then NetworkManager tries to guess the metered state,
+/// for example based on the device type or on DHCP options (like Android devices exposing a "ANDROID_METERED" DHCP vendor option).
+/// This then leads to either NM_METERED_GUESS_NO or NM_METERED_GUESS_YES.
+///
+/// Most applications probably should treat the runtime state NM_METERED_GUESS_YES like NM_METERED_YES, and all other states as not metered.
+///
+/// Note that the per-device metered states are then combined to a global metered state.
+/// This is basically the metered state of the device with the best default route.
+/// However, that generalization of a global metered state may not be correct if the default routes for IPv4 and IPv6 are on different devices, or if policy routing is configured.
+/// In general, the global metered state tries to express whether the traffic is likely metered, but since that depends on the traffic itself, there is not one answer in all cases.
+/// Hence, an application may want to consider the per-device's metered states.
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    zvariant::Type,
+    Deserialize_repr,
+    Serialize_repr,
+    strum_macros::FromRepr,
+    strum_macros::Display,
+)]
+#[repr(u32)]
+pub enum NMMetered {
+    /// The metered status is unknown
+    #[default]
+    Unknown = 0,
+    /// Metered, the value was explicitly configured
+    Yes = 1,
+    /// Not metered, the value was explicitly configured
+    No = 2,
+    /// Metered, the value was guessed
+    GuessYes = 3,
+    /// Not metered, the value was guessed
+    GuessNo = 4,
+}
+owned_repr!(NMMetered);
+
+/// Flags related to radio interfaces.
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    zvariant::Type,
+    Deserialize_repr,
+    Serialize_repr,
+    strum_macros::FromRepr,
+    strum_macros::Display,
+)]
+#[repr(u32)]
+pub enum NMRadioFlags {
+    /// an alias for numeric zero, no flags set.
+    #[default]
+    None = 0,
+    /// A Wireless LAN device or rfkill switch is detected in the system.
+    WLANAvailable = 0x1,
+    /// A Wireless WAN device or rfkill switch is detected in the system.
+    WWANAvailable = 0x2,
+}
+owned_repr!(NMRadioFlags);
+
+/// `%_NM_VERSION_INFO_CAPABILITY_UNUSED`: a dummy capability. It has no meaning, don't use it.
+///
+/// Currently no enum values are defined. These capabilities are exposed on D-Bus in the "VersionInfo" bit field.
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    zvariant::Type,
+    Deserialize_repr,
+    Serialize_repr,
+    strum_macros::FromRepr,
+    strum_macros::Display,
+)]
+#[repr(u32)]
+pub enum NMVersionInfoCapability {
+    /// rust made me put something here
+    #[default]
+    None,
+}
+owned_repr!(NMVersionInfoCapability);
+
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    zvariant::Type,
+    Deserialize,
+    Serialize,
+    derive_more::AsRef,
+    derive_more::Deref,
+    derive_more::Display,
+    derive_more::From,
+)]
+pub struct Ssid(pub String);
+impl TryFrom<zvariant::OwnedValue> for Ssid {
+    type Error = zvariant::Error;
+    fn try_from(value: zvariant::OwnedValue) -> Result<Self, Self::Error> {
+        if let zvariant::Value::Array(a) = *value {
+            // This should be infallible as well and should not drop characters where I put it
+            let collected = a
+                .into_iter()
+                .filter_map(|v| (*v).try_into().ok())
+                .collect::<Vec<u8>>();
+
+            if let Ok(s) = String::from_utf8(collected) {
+                return Ok(Self(s));
+            }
+        }
+
+        Err(zvariant::Error::IncorrectType)
+    }
+}
+
+/// 802.11 access point flags.
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    zvariant::Type,
+    Deserialize_repr,
+    Serialize_repr,
+    strum_macros::FromRepr,
+    strum_macros::Display,
+)]
+#[repr(u32)]
+pub enum NM80211ApFlags {
+    /// access point has no special capabilities
+    #[default]
+    None = 0x00000000,
+    /// access point requires authentication and encryption (usually means WEP)
+    Privacy = 0x00000001,
+    /// access point supports some WPS method
+    WPS = 0x00000002,
+    /// access point supports push-button WPS
+    WPSPushButton = 0x00000004,
+    /// access point supports PIN-based WPS
+    WPSPin = 0x00000008,
+}
+owned_repr!(NM80211ApFlags);
+
+/// 802.11 access point security and authentication flags.
+///
+/// These flags describe the current security requirements of an access point as determined from the access point's beacon.
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    zvariant::Type,
+    Deserialize_repr,
+    Serialize_repr,
+    strum_macros::FromRepr,
+    strum_macros::Display,
+)]
+#[repr(u32)]
+pub enum NM80211ApSecurityFlags {
+    /// the access point has no special security requirements
+    #[default]
+    None = 0x00000000,
+    /// 40/64-bit WEP is supported for pairwise/unicast encryption
+    PairWEP40 = 0x00000001,
+    /// 104/128-bit WEP is supported for pairwise/unicast encryption
+    PairWEP104 = 0x00000002,
+    /// TKIP is supported for pairwise/unicast encryption
+    PairTKIP = 0x00000004,
+    /// AES/CCMP is supported for pairwise/unicast encryption
+    PairCCMP = 0x00000008,
+    /// 40/64-bit WEP is supported for group/broadcast encryption
+    GroupWEP40 = 0x00000010,
+    /// 104/128-bit WEP is supported for group/broadcast encryption
+    GroupWEP104 = 0x00000020,
+    /// TKIP is supported for group/broadcast encryption
+    GroupTKIP = 0x00000040,
+    /// AES/CCMP is supported for group/broadcast encryption
+    GroupCCMP = 0x00000080,
+    /// WPA/RSN Pre-Shared Key encryption is supported
+    KeyMgmtPSK = 0x00000100,
+    /// 802.1x authentication and key management is supported
+    KeyMgmt8021x = 0x00000200,
+    /// WPA/RSN Simultaneous Authentication of Equals is supported
+    KeyMgmtSAE = 0x00000400,
+    /// WPA/RSN Opportunistic Wireless Encryption is supported
+    KeyMgmtOWE = 0x00000800,
+    /// WPA/RSN Opportunistic Wireless Encryption transition mode is supported. Since: 1.26.
+    KeyMgmtOWETransitionMode = 0x00001000,
+    /// WPA3 Enterprise Suite-B 192 bit mode is supported. Since: 1.30.
+    KeyMgmtEAP = 0x00002000,
+}
+owned_repr!(NM80211ApSecurityFlags);

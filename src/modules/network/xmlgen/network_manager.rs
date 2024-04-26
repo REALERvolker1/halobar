@@ -203,7 +203,7 @@ trait NetworkManager {
 
     /// Metered property
     #[zbus(property)]
-    fn metered(&self) -> zbus::Result<u32>;
+    fn metered(&self) -> zbus::Result<NMMetered>;
 
     /// NetworkingEnabled property
     #[zbus(property)]
@@ -219,7 +219,7 @@ trait NetworkManager {
 
     /// RadioFlags property
     #[zbus(property)]
-    fn radio_flags(&self) -> zbus::Result<u32>;
+    fn radio_flags(&self) -> zbus::Result<NMRadioFlags>;
 
     /// Startup property
     #[zbus(property)]
@@ -235,7 +235,7 @@ trait NetworkManager {
 
     /// VersionInfo property
     #[zbus(property)]
-    fn version_info(&self) -> zbus::Result<Vec<u32>>;
+    fn version_info(&self) -> zbus::Result<Vec<NMVersionInfoCapability>>;
 
     /// WimaxEnabled property
     #[zbus(property)]
