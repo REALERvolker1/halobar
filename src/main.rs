@@ -1,7 +1,8 @@
 #![allow(async_fn_in_trait)]
 
+pub mod globals;
 pub mod modules;
-pub mod prelude;
+mod prelude;
 
 #[cfg(target_os = "linux")]
 fn main() -> prelude::R<()> {

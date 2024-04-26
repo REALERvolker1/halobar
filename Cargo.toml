@@ -88,11 +88,13 @@ ahash = { version = "0.8.11", features = [
     "std",
 ], default-features = false }
 serde = { version = "1.0.197", features = ["rc", "derive"] }
-nix = { version = "0.28.0", features = ["fs", "user", "hostname"] }
+nix = { version = "0.28.0", features = ["fs", "user", "hostname", "net"] }
 chrono = { version = "0.4.38", default-features = false, features = [
     "std",
     "clock",
 ] }
+sysinfo = { version = "0.30.11", features = ["linux-netdevs", "linux-tmpfs"] }
+size = "0.4.1"
 
 futures-util = "0.3.30"
 flume = { version = "0.11.0", default-features = false, features = ["async"] }
@@ -153,6 +155,8 @@ halobar_core = { workspace = true }
 halobar_config = { workspace = true }
 halogen = { workspace = true, features = ["bin", "complete"] }
 zbus = { workspace = true }
+sysinfo = { workspace = true }
+size = { workspace = true }
 
 
 # monoio = { version = "0.2.3", features = [

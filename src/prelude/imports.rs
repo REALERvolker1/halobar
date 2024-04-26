@@ -7,8 +7,10 @@ pub(crate) use halobar_config::{
     fmt::{FmtSegmentVec, FmtSegments, FormatStr, HaloFormatter},
 };
 pub(crate) use halogen::{Event, Message};
+pub(crate) use nix::errno::Errno;
 pub(crate) use once_cell::sync::{Lazy, OnceCell};
 pub(crate) use serde::{Deserialize, Serialize};
+pub(crate) use size::Size;
 pub(crate) use smart_default::SmartDefault;
 pub(crate) use std::{
     cell::{Cell, RefCell},
@@ -17,7 +19,7 @@ pub(crate) use std::{
     rc::Rc,
     str::FromStr,
     sync::Arc,
-    time::Duration,
+    time::{Duration, Instant},
 };
 pub(crate) use strum::{EnumMessage, VariantArray, VariantNames};
 pub(crate) use tokio::{
