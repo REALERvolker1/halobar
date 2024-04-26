@@ -14,7 +14,7 @@ pub(crate) use size::Size;
 pub(crate) use smart_default::SmartDefault;
 pub(crate) use std::{
     cell::{Cell, RefCell},
-    env, io,
+    env, fs, io,
     path::{Path, PathBuf},
     rc::Rc,
     str::FromStr,
@@ -23,7 +23,7 @@ pub(crate) use std::{
 };
 pub(crate) use strum::{EnumMessage, VariantArray, VariantNames};
 pub(crate) use tokio::{
-    fs, join, select,
+    join, select,
     sync::{
         broadcast,
         mpsc::{self, Receiver, Sender, UnboundedReceiver, UnboundedSender},

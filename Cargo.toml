@@ -155,7 +155,7 @@ halobar_core = { workspace = true }
 halobar_config = { workspace = true }
 halogen = { workspace = true, features = ["bin", "complete"] }
 zbus = { workspace = true }
-sysinfo = { workspace = true }
+# sysinfo = { workspace = true }
 size = { workspace = true }
 
 
