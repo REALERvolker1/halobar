@@ -91,12 +91,12 @@ impl Network {
 // impl BackendModule for Network
 
 pub struct Proxies<'c> {
-    network_manager: network_manager::NetworkManagerProxy<'c>,
-    settings: settings::SettingsProxy<'c>,
-    device: device::DeviceProxy<'c>,
-    stats: device::StatisticsProxy<'c>,
-    active: active_connection::ActiveProxy<'c>,
-    access_point: access_point::AccessPointProxy<'c>,
+    network_manager: xmlgen::network_manager::NetworkManagerProxy<'c>,
+    settings: xmlgen::settings::SettingsProxy<'c>,
+    device: xmlgen::device::DeviceProxy<'c>,
+    stats: xmlgen::device::StatisticsProxy<'c>,
+    active: xmlgen::active_connection::ActiveProxy<'c>,
+    access_point: xmlgen::access_point::AccessPointProxy<'c>,
 }
 impl<'c> Proxies<'c> {
     pub async fn new(
@@ -104,25 +104,25 @@ impl<'c> Proxies<'c> {
         iface_name: Option<&str>,
     ) -> Result<Proxies<'c>, NetError> {
         // TODO: Make this a function input
-        let nm_proxy = network_manager::NetworkManagerProxy::builder(conn)
+        let network_manager = xmlgen::network_manager::NetworkManagerProxy::builder(conn)
             .build()
             .await?;
 
-        let is_enabled = nm_proxy.connectivity_check_enabled().await?;
+        let is_enabled = network_manager.connectivity_check_enabled().await?;
         if !is_enabled {
             return Err(NetError::NetDisabled);
         }
 
-        // let active_connections = nm_proxy.active_connections().await?;
+        // let active_connections = network_manager.active_connections().await?;
 
-        let active_devices = nm_proxy.devices().await?;
+        let active_devices = network_manager.devices().await?;
         if active_devices.is_empty() {
             return Err(NetError::NetDisabled);
         }
         let mut device_proxy = None;
 
         for device in active_devices {
-            let proxy = device::DeviceProxy::builder(conn)
+            let proxy = xmlgen::device::DeviceProxy::builder(conn)
                 .path(device)?
                 .cache_properties(CacheProperties::No)
                 .build()
@@ -136,7 +136,7 @@ impl<'c> Proxies<'c> {
                     }
                 }
                 None => {
-                    // proxy
+                    // let device_status = proxy.
                 }
             }
         }

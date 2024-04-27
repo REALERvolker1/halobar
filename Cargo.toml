@@ -93,7 +93,6 @@ chrono = { version = "0.4.38", default-features = false, features = [
     "std",
     "clock",
 ] }
-sysinfo = { version = "0.30.11", features = ["linux-netdevs", "linux-tmpfs"] }
 size = "0.4.1"
 
 futures-util = "0.3.30"
@@ -158,6 +157,7 @@ zbus = { workspace = true }
 # sysinfo = { workspace = true }
 size = { workspace = true }
 serde_repr = "0.1.19"
+bitflags = { version = "2.5.0", features = ["std"] }
 
 
 # monoio = { version = "0.2.3", features = [

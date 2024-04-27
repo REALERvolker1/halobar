@@ -214,37 +214,51 @@ pub enum NMDeviceType {
 }
 owned_repr!(NMDeviceType);
 
-/// General device capability flags.
-#[derive(
-    Debug,
-    Default,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    zvariant::Type,
-    Deserialize_repr,
-    Serialize_repr,
-    strum_macros::FromRepr,
-    strum_macros::Display,
-)]
-#[repr(u32)]
-pub enum NMDeviceCapabilities {
-    /// device has no special capabilities
-    #[default]
-    None = 0x00000000,
-    /// NetworkManager supports this device
-    NMSupported = 0x00000001,
-    /// this device can indicate carrier status
-    CarrierDetect = 0x00000002,
-    /// this device is a software device
-    IsSoftware = 0x00000004,
-    /// this device supports single-root I/O virtualization
-    SRIOV = 0x00000008,
+// /// General device capability flags.
+// #[derive(
+//     Debug,
+//     Default,
+//     Clone,
+//     Copy,
+//     PartialEq,
+//     Eq,
+//     PartialOrd,
+//     Ord,
+//     zvariant::Type,
+//     Deserialize_repr,
+//     Serialize_repr,
+//     strum_macros::FromRepr,
+//     strum_macros::Display,
+// )]
+// #[repr(u32)]
+// pub enum NMDeviceCapabilities {
+//     /// device has no special capabilities
+//     #[default]
+//     None = 0x00000000,
+//     /// NetworkManager supports this device
+//     NMSupported = 0x00000001,
+//     /// this device can indicate carrier status
+//     CarrierDetect = 0x00000002,
+//     /// this device is a software device
+//     IsSoftware = 0x00000004,
+//     /// this device supports single-root I/O virtualization
+//     SRIOV = 0x00000008,
+// }
+// owned_repr!(NMDeviceCapabilities);
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NMDeviceCapabilities(pub u32);
+
+bitflags::bitflags! {
+    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+    pub struct NMDeviceCapabilitiesFlags: u32 {
+        const NONE = 0x00000000;
+        const NM_SUPPORTED = 0x00000001;
+        const CARRIER_DETECT = 0x00000002;
+        const IS_SOFTWARE = 0x00000004;
+        const SRIOV = 0x00000008;
+    }
 }
-owned_repr!(NMDeviceCapabilities);
 
 /// [NMCapability](https://networkmanager.dev/docs/api/latest/nm-dbus-types.html#NMCapability) names the numbers in the Capabilities property.
 /// Capabilities are positive numbers. They are part of stable API and a certain capability number is guaranteed not to change.
@@ -294,17 +308,21 @@ pub struct NMCapabilityVec(pub Vec<NMCapability>);
 impl TryFrom<zvariant::OwnedValue> for NMCapabilityVec {
     type Error = zvariant::Error;
     fn try_from(value: zvariant::OwnedValue) -> Result<Self, Self::Error> {
-        if let zvariant::Value::Array(a) = *value {
+        if let zvariant::Value::Array(arr) = value.downcast_ref()? {
             // I know this is unnecessarily expensive, but I intend to only call this in one specific place and it should theoretically be infallible
-            let init_length = a.len();
-            let maybe = a
-                .into_iter()
-                .filter_map(|v| NMCapability::try_from(*v).ok())
-                .collect::<Vec<_>>();
+            let mut into = Vec::with_capacity(arr.len());
 
-            if init_length == maybe.len() {
-                return Ok(Self(maybe));
+            for item in arr.into_iter() {
+                match item {
+                    zvariant::Value::U32(u) => match NMCapability::from_repr(*u) {
+                        Some(s) => into.push(s),
+                        None => return Err(zvariant::Error::IncorrectType),
+                    },
+                    _ => return Err(zvariant::Error::IncorrectType),
+                }
             }
+
+            return Ok(NMCapabilityVec(into));
         }
 
         Err(zvariant::Error::IncorrectType)
@@ -436,6 +454,8 @@ pub enum NMRollbackResult {
 owned_repr!(NMRollbackResult);
 
 /// Flags describing the current activation state.
+///
+/// TODO: Make a bitflags!
 #[derive(
     Debug,
     Default,
@@ -527,6 +547,8 @@ pub enum NMMetered {
 owned_repr!(NMMetered);
 
 /// Flags related to radio interfaces.
+///
+/// TODO: Make a bitflags
 #[derive(
     Debug,
     Default,
@@ -599,11 +621,11 @@ pub struct Ssid(pub String);
 impl TryFrom<zvariant::OwnedValue> for Ssid {
     type Error = zvariant::Error;
     fn try_from(value: zvariant::OwnedValue) -> Result<Self, Self::Error> {
-        if let zvariant::Value::Array(a) = *value {
+        if let zvariant::Value::Array(a) = value.downcast_ref()? {
             // This should be infallible as well and should not drop characters where I put it
             let collected = a
                 .into_iter()
-                .filter_map(|v| (*v).try_into().ok())
+                .filter_map(|v| v.try_into().ok())
                 .collect::<Vec<u8>>();
 
             if let Ok(s) = String::from_utf8(collected) {
@@ -616,6 +638,8 @@ impl TryFrom<zvariant::OwnedValue> for Ssid {
 }
 
 /// 802.11 access point flags.
+///
+/// TODO: Make a bitflags
 #[derive(
     Debug,
     Default,
@@ -650,6 +674,8 @@ owned_repr!(NM80211ApFlags);
 /// 802.11 access point security and authentication flags.
 ///
 /// These flags describe the current security requirements of an access point as determined from the access point's beacon.
+///
+/// TODO: Make a bitflags
 #[derive(
     Debug,
     Default,
@@ -787,6 +813,8 @@ pub enum NMActiveConnectionStateReason {
 owned_repr!(NMActiveConnectionStateReason);
 
 /// Flags describing the current activation state.
+///
+/// TODO: Make a bitflags
 #[derive(
     Debug,
     Default,
