@@ -4,12 +4,13 @@ pub(crate) use color_eyre::{
 };
 pub(crate) use halobar_config::{
     config_struct,
-    fmt::{FmtSegmentVec, FmtSegments, FormatStr, HaloFormatter},
+    fmt::{FmtSegmentVec, FmtSegments, FnTable, FormatStr, HaloFormatter},
 };
 pub(crate) use halogen::{Event, Message};
 pub(crate) use nix::errno::Errno;
 pub(crate) use once_cell::sync::{Lazy, OnceCell};
 pub(crate) use serde::{Deserialize, Serialize};
+pub(crate) use serde_repr::{Deserialize_repr, Serialize_repr};
 pub(crate) use size::Size;
 pub(crate) use smart_default::SmartDefault;
 pub(crate) use std::{
@@ -33,4 +34,3 @@ pub(crate) use tokio::{
 };
 pub(crate) use tracing::{debug, error, info, instrument, trace, warn};
 pub(crate) use zbus::{names as zbus_names, zvariant};
-pub(crate) use serde_repr::{Deserialize_repr, Serialize_repr};

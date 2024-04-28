@@ -4,7 +4,7 @@ mod variants;
 
 use zbus::proxy::CacheProperties;
 
-use self::variants::NMDeviceType;
+use self::variants::{NMDeviceType, NMState};
 
 use super::*;
 
@@ -14,7 +14,29 @@ pub struct NetData {
     // pub ssid: Arc<String>,
     pub up_speed: u64,
     pub down_speed: u64,
-    pub is_online: bool,
+    pub state: NMState,
+}
+
+impl NMState {
+    /// TODO: Icon config
+    fn state_icon(&self) -> char {
+        match self {
+            NMState::Asleep => '󰲚',
+            NMState::ConnectedGlobal => '󰱔',
+            NMState::ConnectedLocal => '󰲁',
+            NMState::ConnectedSite => '󰲝',
+            NMState::Connecting => '󰲺',
+            NMState::Disconnected => '󰲜',
+            NMState::Disconnecting => '󰲝',
+            NMState::Unknown => '󰲊',
+        }
+    }
+    fn is_online(&self) -> bool {
+        match self {
+            Self::ConnectedGlobal | Self::Unknown => true,
+            _ => false,
+        }
+    }
 }
 
 struct FormatNet {
@@ -23,20 +45,30 @@ struct FormatNet {
     format: FmtSegmentVec,
     format_offline: FmtSegmentVec,
 }
-// impl HaloFormatter for FormatNet {
-//     type Data = NetData;
-//     fn current_data<'a>(&'a self) -> &'a Self::Data {
-//         &self.data
-//     }
-//     fn default_format_str() -> FormatStr {
-//         ""
-//     }
-// }
+impl HaloFormatter for FormatNet {
+    type Data = NetData;
+    fn current_data<'a>(&'a self) -> &'a Self::Data {
+        &self.data
+    }
+    fn default_format_str() -> FormatStr {
+        "{icon} {up_speed} UP, {down_speed} DOWN".into()
+    }
+    fn fn_table<'a>(&'a self) -> halobar_config::fmt::FnTable<Self::Data, 1> {
+        FnTable([
+            ("icon", |data| Some(data.state.state_icon().to_string())),
+            ("up_speed", |data| Some(format!("{}", data.up_speed))),
+            ("down_speed", |data| Some(format!("{}", data.down_speed))),
+        ])
+    }
+    fn segments<'s>(&'s self) -> FmtSegments<'s> {
+        if self.data.
+    }
+}
 
-// config_struct! {
-//     [Net]
-//     format: FormatStr = FormatStr::default(),
-// }
+config_struct! {
+    [Net]
+    format: FormatStr = FormatStr::default(),
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum NetError {
@@ -90,7 +122,7 @@ impl Network {
     //     Ok(size_bytes)
     // }
 }
-// impl BackendModule for Network
+impl BackendModule for Network {}
 
 pub struct Proxies<'c> {
     network_manager: xmlgen::network_manager::NetworkManagerProxy<'c>,
