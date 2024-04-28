@@ -4,6 +4,8 @@ mod variants;
 
 use zbus::proxy::CacheProperties;
 
+use self::variants::NMDeviceType;
+
 use super::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -130,13 +132,39 @@ impl<'c> Proxies<'c> {
 
             match iface_name {
                 Some(name) => {
-                    let iface = proxy.interface().await?;
+                    let iface = match proxy.interface().await {
+                        Ok(i) => i,
+                        Err(e) => {
+                            warn!("Error getting proxy interface: {e}");
+                            continue;
+                        }
+                    };
+
                     if iface == name {
                         device_proxy.replace(proxy);
+                        break;
                     }
                 }
                 None => {
-                    // let device_status = proxy.
+                    let device_type = match proxy.device_type().await {
+                        Ok(d) => d,
+                        Err(e) => {
+                            warn!("Error getting proxy device type: {e}");
+                            continue;
+                        }
+                    };
+
+                    // This is very naive. the user should ideally have a wifi or ethernet connection in the
+                    // majority of cases, I can't think of a better way to do this without bloating things to hell.
+                    match device_type {
+                        NMDeviceType::Ethernet | NMDeviceType::Wifi | NMDeviceType::WIFI_P2P => {
+                            device_proxy.replace(proxy);
+                            break;
+                        }
+                        _ => {
+                            warn!("Invalid device type: {device_type}, skipping");
+                        }
+                    }
                 }
             }
         }
@@ -149,6 +177,19 @@ impl<'c> Proxies<'c> {
                 ))
             }
         };
+
+        // I got this from the list of active devices. It should just work.
+        let active_connection = device.active_connection().await?;
+        let active = xmlgen::active_connection::ActiveProxy::builder(conn)
+            .path(active_connection)?
+            .build()
+            .await?;
+
+        // let proxies = Proxies {
+        //     network_manager,
+        //     device,
+        //     active,
+        // };
 
         return Err(NetError::NetDisabled);
     }

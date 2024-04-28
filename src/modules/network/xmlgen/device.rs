@@ -129,7 +129,7 @@ trait Device {
 
     /// DeviceType property
     #[zbus(property)]
-    fn device_type(&self) -> zbus::Result<u32>;
+    fn device_type(&self) -> zbus::Result<NMDeviceType>;
 
     /// Dhcp4Config property
     #[zbus(property)]
