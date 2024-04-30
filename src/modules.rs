@@ -34,6 +34,17 @@ pub async fn run(runtime: &tokio::runtime::Runtime) -> R<()> {
         }
     });
 
+    let dbus_conn = zbus::Connection::system().await?;
+
+    let my_conn = dbus_conn.clone();
+
+    let (sender, network_receiver) = oneshot::channel();
+    runtime.spawn(async move {
+        let config = network::NetKnown::default();
+        network::Network::init(config, my_conn, sender).await?;
+        Ok::<_, Report>(())
+    });
+
     tokio::task::block_in_place(|| loop {});
     Ok(())
 }

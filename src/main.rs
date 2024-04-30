@@ -9,7 +9,7 @@ fn main() -> prelude::R<()> {
     color_eyre::install()?;
 
     let mut log_config = halogen::complete::LogConfig::default();
-    log_config.level = halogen::complete::LogLevel::Trace;
+    log_config.level = halogen::complete::LogLevel::Debug;
 
     const NICE_TARGETS: [&str; 5] = ["iced", "wgpu", "zbus", "zbus_xml", "cosmic_text"];
     halogen::complete::init_log(&mut log_config, NICE_TARGETS);

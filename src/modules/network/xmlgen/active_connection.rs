@@ -28,13 +28,13 @@ use zbus::proxy;
     gen_blocking = false
 )]
 trait Active {
-    /// StateChanged signal
-    #[zbus(signal)]
-    fn state_changed(
-        &self,
-        state: NMActiveConnectionState,
-        reason: NMActiveConnectionStateReason,
-    ) -> zbus::Result<()>;
+    // /// StateChanged signal
+    // #[zbus(signal)]
+    // fn state_changed(
+    //     &self,
+    //     state: NMActiveConnectionState,
+    //     reason: NMActiveConnectionStateReason,
+    // ) -> zbus::Result<()>;
 
     /// Connection property
     #[zbus(property)]
@@ -85,7 +85,7 @@ trait Active {
     fn specific_object(&self) -> zbus::Result<zbus::zvariant::OwnedObjectPath>;
 
     /// State property
-    #[zbus(property(emits_changed_signal = "false"))]
+    #[zbus(property(emits_changed_signal = "true"))]
     fn state(&self) -> zbus::Result<NMActiveConnectionState>;
 
     /// StateFlags property

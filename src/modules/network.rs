@@ -135,7 +135,7 @@ pub struct Network {
     // show_state: bool,
 }
 impl Network {
-    async fn init(
+    pub async fn init(
         config: NetKnown,
         conn: zbus::Connection,
         sender: oneshot::Sender<BiChannel<Event, NetData>>,
@@ -160,6 +160,13 @@ impl Network {
                     .map_err(|_| NetError::InitializerSendError)?;
             };
         }
+
+        let mut interface = config.interface;
+        if interface.is_empty() {
+            interface = "wlo1".into();
+        }
+
+        chosen::run(&conn, &network_manager, &interface).await?;
 
         // if config.interface.is_empty() {
         //     let query = primary_connection(&network_manager, &conn).await;
