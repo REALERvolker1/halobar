@@ -26,7 +26,7 @@ pub(crate) use strum::{EnumMessage, VariantArray, VariantNames};
 pub(crate) use tokio::{
     join, select,
     sync::{
-        broadcast,
+        oneshot,
         mpsc::{self, Receiver, Sender, UnboundedReceiver, UnboundedSender},
         Mutex, RwLock, Semaphore,
     },

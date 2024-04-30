@@ -83,22 +83,28 @@ pub struct BiChannel<T, F> {
 impl<T, F> BiChannel<T, F> {
     /// Create a new two-way mpsc channel. The buffer is the number of messages it holds before applying backpressure,
     /// and the context is the string that it logs just in case of any errors during the course of its operation.
-    pub fn new(
+    pub fn new<S: Into<String>>(
         buffer: usize,
-        first_context: Option<String>,
-        second_context: Option<String>,
+        first_context: Option<S>,
+        second_context: Option<S>,
     ) -> (BiChannel<T, F>, BiChannel<F, T>) {
         let (sender1, receiver1) = mpsc::channel(buffer);
         let (sender2, receiver2) = mpsc::channel(buffer);
 
         (
             BiChannel {
-                context: first_context.unwrap_or_else(|| "None".to_owned()),
+                context: match first_context {
+                    Some(s) => s.into(),
+                    None => "None".to_owned(),
+                },
                 sender: sender1,
                 receiver: Some(receiver2),
             },
             BiChannel {
-                context: second_context.unwrap_or_else(|| "None".to_owned()),
+                context: match second_context {
+                    Some(s) => s.into(),
+                    None => "None".to_owned(),
+                },
                 sender: sender2,
                 receiver: Some(receiver1),
             },

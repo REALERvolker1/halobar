@@ -25,8 +25,7 @@ impl BackendModule for Time {
         _input: Self::Input,
         config: Self::Config,
     ) -> Result<(Self, BiChannel<Event, String>), Self::Error> {
-        let (channel, yours) =
-            BiChannel::new(5, Some("Time module".into()), Some("Time receiver".into()));
+        let (channel, yours) = BiChannel::new(5, Some("Time module"), Some("Time receiver"));
 
         // let (state_sender, state_receiver) = watch::channel(FormatState::default());
 
