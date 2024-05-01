@@ -854,3 +854,55 @@ pub enum NMActivationStateFlags {
     External = 0x80,
 }
 owned_repr!(NMActivationStateFlags);
+
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    zvariant::Type,
+    Deserialize,
+    Serialize,
+    derive_more::From,
+    derive_more::Display,
+)]
+pub struct UpSpeed(u64);
+impl TryFrom<zvariant::OwnedValue> for UpSpeed {
+    type Error = zvariant::Error;
+    fn try_from(value: zvariant::OwnedValue) -> Result<Self, Self::Error> {
+        match value.downcast_ref::<u64>() {
+            Ok(v) => Ok(Self(v)),
+            _ => Err(zvariant::Error::IncorrectType),
+        }
+    }
+}
+
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    zvariant::Type,
+    Deserialize,
+    Serialize,
+    derive_more::From,
+    derive_more::Display,
+)]
+pub struct DownSpeed(u64);
+impl TryFrom<zvariant::OwnedValue> for DownSpeed {
+    type Error = zvariant::Error;
+    fn try_from(value: zvariant::OwnedValue) -> Result<Self, Self::Error> {
+        match value.downcast_ref::<u64>() {
+            Ok(v) => Ok(Self(v)),
+            _ => Err(zvariant::Error::IncorrectType),
+        }
+    }
+}

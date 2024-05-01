@@ -37,11 +37,11 @@ trait Statistics {
 
     /// RxBytes property
     #[zbus(property)]
-    fn rx_bytes(&self) -> zbus::Result<u64>;
+    fn rx_bytes(&self) -> zbus::Result<DownSpeed>;
 
     /// TxBytes property
     #[zbus(property)]
-    fn tx_bytes(&self) -> zbus::Result<u64>;
+    fn tx_bytes(&self) -> zbus::Result<UpSpeed>;
 }
 /// # D-Bus interface proxy for: `org.freedesktop.NetworkManager.Device`
 ///

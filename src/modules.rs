@@ -59,7 +59,24 @@ macro_rules! proxy {
     };
 }
 pub use proxy;
+use tokio::runtime::Runtime;
 use tracing::Instrument;
+
+pub trait BackendModule2: Sized + Send {
+    /// The type of config that the module requires for user customization.
+    type Config;
+    /// The type of input that the module requires to create a new instance.
+    type Input;
+    /// The type of error that the module can return
+    type Error;
+    /// The function that runs this module.
+    async fn init<D: Into<DisplayOutput>>(
+        runtime: Runtime,
+        config: Self::Config,
+        input: Self::Input,
+        sender: oneshot::Sender<BiChannel<Event, D>>,
+    );
+}
 
 /// A module that can be used in the backend to provide data.
 pub trait BackendModule: Sized + Send {
@@ -160,8 +177,18 @@ impl FormatState {
     }
 }
 
+/// Content that can be printed by the frontend.
+///
+/// To use this, impl `Into<DisplayOutput>` for `T`.
+///
+/// TODO: Finalize stuff required. This is just a string temporarily.
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_more::Display, derive_more::From,
+)]
+pub struct DisplayOutput(String);
+
 /// The type of module that this is. This determines a lot about how it is run.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum_macros::Display)]
 pub enum ModuleType {
     /// The module returns a constant string through its channel on start, and is not run.
     Constant,
@@ -171,17 +198,19 @@ pub enum ModuleType {
     Loop,
 }
 
-/// A wrapper for [`zbus::Connection`] that allows modules to specify the type of connection they require
-#[derive(Debug, Clone)]
-pub enum ConnectionType {
-    System(zbus::Connection),
-    Session(zbus::Connection),
+/// A [`zbus::Connection`] that contains a connection to the system bus
+pub struct SystemConnection(pub zbus::Connection);
+impl SystemConnection {
+    pub async fn new() -> zbus::Result<Self> {
+        let conn = zbus::Connection::system().await?;
+        Ok(Self(conn))
+    }
 }
-impl ConnectionType {
-    pub fn get(self) -> zbus::Connection {
-        match self {
-            Self::Session(c) => c,
-            Self::System(c) => c,
-        }
+/// A [`zbus::Connection`] that contains a connection to the session bus
+pub struct SessionConnection(pub zbus::Connection);
+impl SessionConnection {
+    pub async fn new() -> zbus::Result<Self> {
+        let conn = zbus::Connection::session().await?;
+        Ok(Self(conn))
     }
 }

@@ -116,8 +116,10 @@ pub enum NetError {
     Zbus(#[from] zbus::Error),
     #[error("Networking disabled")]
     NetDisabled,
-    #[error("Failed to send network module channel to subscriber")]
-    InitializerSendError,
+    #[error("Failed to send message to channel")]
+    SendError,
+    #[error("Failed to receive message from channel")]
+    RecvError,
 }
 
 pub struct Network {
@@ -135,6 +137,7 @@ pub struct Network {
 }
 impl Network {
     pub async fn init(
+        runtime: tokio::runtime::Runtime,
         config: NetKnown,
         conn: zbus::Connection,
         sender: oneshot::Sender<BiChannel<Event, NetData>>,
@@ -151,29 +154,87 @@ impl Network {
 
         let mut primary_stream = network_manager.receive_primary_connection_changed().await;
 
-        let (s, r) = flume::bounded(1);
-        let sender = Arc::new(s);
-        let receiver = Arc::new(r);
+        let (kill_sender, r) = flume::bounded(1);
+        // let kill_sender = Arc::new(s);
+        let kill_receiver = Arc::new(r);
 
-        while let Some(conn) = primary_stream.next().await {
-            let conn_path = conn.get().await?;
+        let (s, mut property_receiver) = mpsc::channel(8);
+        let property_sender = Arc::new(s);
 
-            primary_stream
+        let format_thread =
+            runtime.spawn(async move { while let Some(prop) = property_receiver.recv().await {} });
+
+        while let Some(maybe_path) = primary_stream.next().await {
+            // Send the kill error before getting the current connection path, because then I don't have
+            // to worry about weird mut references and whatnot.
+            kill_sender.send_async(()).await.map_err(|e| {
+                error!("Failed to send kill signal to networkmanager modules: {e}");
+                NetError::SendError
+            })?;
+
+            let path = maybe_path.get().await?;
+            let active_proxy = xmlgen::active_connection::ActiveProxy::builder(&conn)
+                .path(path)?
+                .build()
+                .await?;
+
+            let prop_stream = active_proxy.receive_state_changed().await;
+            let kill = kill_receiver.clone();
+            let prop_sender = property_sender.clone();
+            runtime.spawn(async move {
+                if let Err(e) =
+                    sub_listener("Networkmanager State", prop_stream, kill, prop_sender).await
+                {
+                    error!("State handler NAME returned error: {e}");
+                }
+            });
+
+            // primary_stream
         }
 
         Ok(())
     }
 }
 
-struct SubListener<'p, T> {
-    stream: PropertyStream<'p, T>,
-    prop_type: PropertyTypeDiscriminants,
+async fn sub_listener<'p, T>(
+    name: &'static str,
+    mut stream: PropertyStream<'p, T>,
     shutdown_receiver: Arc<flume::Receiver<()>>,
     property_sender: Arc<mpsc::Sender<PropertyType>>,
+) -> Result<(), NetError>
+where
+    T: std::marker::Unpin + TryFrom<zvariant::OwnedValue> + std::fmt::Debug + Into<PropertyType>,
+    T::Error: Into<zbus::Error>,
+{
+    loop {
+        select! { biased;
+            res = shutdown_receiver.recv_async() => {
+                if let Err(e) = res {
+                    error!("Shutdown receiver for '{name}' returned an error: {e}");
+                    return Err(NetError::RecvError);
+                }
+            }
+            Some(s) = stream.next() => {
+                let raw_value = s.get().await?;
+
+                let prop = raw_value.into();
+
+                if let Err(e) = property_sender.send(prop).await {
+                    error!("Failed to send prop to '{name}' receiver: {e}");
+                    return Err(NetError::SendError)
+                }
+            }
+        }
+    }
+
+    // Ok(())
 }
 
-#[derive(Debug, strum_macros::EnumDiscriminants)]
+#[derive(Debug, strum_macros::Display, derive_more::From)]
 enum PropertyType {
-    UpSpeed(u64),
-    DownSpeed(u64),
+    UpSpeed(variants::UpSpeed),
+    DownSpeed(variants::DownSpeed),
+    Ssid(variants::Ssid),
+    IfaceName(String),
+    ActiveConnectionState(variants::NMActiveConnectionState),
 }
