@@ -16,7 +16,7 @@ pub struct Time {
     channel: BiChannel<String, Event>,
     state: Mutex<FormatState>,
 }
-impl BackendModule for Time {
+impl BackendModule1 for Time {
     type Input = ();
     type Config = TimeKnown;
     type Error = TimeError;
@@ -83,10 +83,10 @@ impl BackendModule for Time {
         }
         Ok(())
     }
-    #[inline]
-    fn module_type() -> ModuleType {
-        ModuleType::Loop
-    }
+    // #[inline]
+    // fn module_type() -> ModuleType {
+    //     ModuleType::Loop
+    // }
 }
 
 #[derive(Debug, derive_more::Error, derive_more::Display)]

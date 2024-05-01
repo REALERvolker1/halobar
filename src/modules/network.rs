@@ -5,7 +5,10 @@ mod variants;
 
 use futures_util::stream::FuturesUnordered;
 use futures_util::StreamExt;
-use zbus::proxy::{CacheProperties, PropertyStream};
+use zbus::{
+    proxy::{CacheProperties, PropertyStream},
+    zvariant::OwnedObjectPath,
+};
 
 use self::{
     variants::{NMDeviceType, NMState},
@@ -120,6 +123,8 @@ pub enum NetError {
     SendError,
     #[error("Failed to receive message from channel")]
     RecvError,
+    #[error("Failed to join task")]
+    JoinError,
 }
 
 pub struct Network {
@@ -135,100 +140,225 @@ pub struct Network {
     // show_device: bool,
     // show_state: bool,
 }
-impl Network {
-    pub async fn init(
-        runtime: tokio::runtime::Runtime,
-        config: NetKnown,
-        conn: zbus::Connection,
-        sender: oneshot::Sender<BiChannel<Event, NetData>>,
-    ) -> Result<(), NetError> {
+impl BackendModule for Network {
+    type Error = NetError;
+    type Input = (NetKnown, SystemConnection);
+    async fn run<'r, D: Into<DisplayOutput>>(
+        runtime: Arc<Runtime>,
+        input: Self::Input,
+        yield_sender: Arc<mpsc::Sender<ModuleType<D>>>,
+    ) -> Result<bool, Self::Error> {
+        trace!("Starting module");
+
+        let (config, conn) = input;
+
         if !config.is_valid() {
             return Err(NetError::NetDisabled);
         }
 
+        let conn = conn.0;
+
         let network_manager = network_manager::NetworkManagerProxy::builder(&conn)
+            .cache_properties(CacheProperties::No)
             .build()
             .await?;
 
-        let primary = network_manager.primary_connection().await?;
+        let mut primary_path = network_manager.primary_connection().await?;
 
         let mut primary_stream = network_manager.receive_primary_connection_changed().await;
-
-        let (kill_sender, r) = flume::bounded(1);
-        // let kill_sender = Arc::new(s);
-        let kill_receiver = Arc::new(r);
 
         let (s, mut property_receiver) = mpsc::channel(8);
         let property_sender = Arc::new(s);
 
-        let format_thread =
-            runtime.spawn(async move { while let Some(prop) = property_receiver.recv().await {} });
+        let (kill_sender, r) = flume::unbounded();
+        let kill_receiver = Arc::new(r);
 
-        while let Some(maybe_path) = primary_stream.next().await {
-            // Send the kill error before getting the current connection path, because then I don't have
-            // to worry about weird mut references and whatnot.
-            kill_sender.send_async(()).await.map_err(|e| {
-                error!("Failed to send kill signal to networkmanager modules: {e}");
+        let (output_sender, output_receiver) = BiChannel::new(
+            6,
+            Some("Networkmanager module"),
+            Some("Networkmanager receiver"),
+        );
+        yield_sender
+            .send(ModuleType::Loop(output_receiver))
+            .await
+            .map_err(|e| {
+                error!("Failed to send message to agggregator: {e}");
                 NetError::SendError
             })?;
 
-            let path = maybe_path.get().await?;
-            let active_proxy = xmlgen::active_connection::ActiveProxy::builder(&conn)
-                .path(path)?
-                .build()
-                .await?;
+        let format_task = runtime.spawn(async move {
+            while let Some(prop) = property_receiver.recv().await {
+                debug!("Format task received prop: {}", prop);
+            }
+        });
 
-            let prop_stream = active_proxy.receive_state_changed().await;
-            let kill = kill_receiver.clone();
-            let prop_sender = property_sender.clone();
-            runtime.spawn(async move {
-                if let Err(e) =
-                    sub_listener("Networkmanager State", prop_stream, kill, prop_sender).await
-                {
-                    error!("State handler NAME returned error: {e}");
+        let mut current_listener: Option<tokio::task::JoinHandle<Result<(), NetError>>> =
+            Some(tokio::spawn(active_conn_listen(
+                primary_path.clone(),
+                conn.clone(),
+                Arc::clone(&kill_receiver),
+                Arc::clone(&property_sender),
+            )));
+
+        // I split this into its own future because I want to be able to run cleanup code after it throws errors at me
+        let primary_stream_listener = async {
+            while let Some(maybe_path) = primary_stream.next().await {
+                // Send the kill error before getting the current connection path, because then I don't have
+                // to worry about weird mut references and whatnot.
+                kill_sender.send_async(()).await.map_err(|e| {
+                    error!("Failed to send kill signal to networkmanager modules: {e}");
+                    NetError::SendError
+                })?;
+
+                // it might not have quit fully when I sent the kill signal for some reason.
+                if let Some(ref mut handle) = current_listener {
+                    match handle.await {
+                        Ok(Ok(())) => {}
+                        Ok(Err(e)) => return Err(e),
+                        Err(e) => {
+                            error!("Error joining task: {e}");
+                            return Err(NetError::JoinError);
+                        }
+                    };
                 }
-            });
+                primary_path = maybe_path.get().await?;
 
-            // primary_stream
+                current_listener.replace(tokio::spawn(active_conn_listen(
+                    primary_path,
+                    conn.clone(),
+                    Arc::clone(&kill_receiver),
+                    Arc::clone(&property_sender),
+                )));
+            }
+
+            Ok::<(), NetError>(())
+        };
+
+        let run_result = primary_stream_listener.await;
+
+        if !format_task.is_finished() {
+            format_task.abort();
         }
 
-        Ok(())
+        // release the error after cleanups
+        run_result?;
+
+        Ok(false)
     }
 }
 
-async fn sub_listener<'p, T>(
-    name: &'static str,
-    mut stream: PropertyStream<'p, T>,
-    shutdown_receiver: Arc<flume::Receiver<()>>,
+/// Listen to interfaces on the active connection
+async fn active_conn_listen<'c>(
+    primary_path: OwnedObjectPath,
+    conn: zbus::Connection,
+    kill_receiver: Arc<flume::Receiver<()>>,
     property_sender: Arc<mpsc::Sender<PropertyType>>,
-) -> Result<(), NetError>
-where
-    T: std::marker::Unpin + TryFrom<zvariant::OwnedValue> + std::fmt::Debug + Into<PropertyType>,
-    T::Error: Into<zbus::Error>,
-{
-    loop {
-        select! { biased;
-            res = shutdown_receiver.recv_async() => {
-                if let Err(e) = res {
-                    error!("Shutdown receiver for '{name}' returned an error: {e}");
-                    return Err(NetError::RecvError);
-                }
-            }
-            Some(s) = stream.next() => {
-                let raw_value = s.get().await?;
+) -> Result<(), NetError> {
+    trace!("Creating ActiveProxy from path '{primary_path}'");
 
-                let prop = raw_value.into();
+    let active_proxy = xmlgen::active_connection::ActiveProxy::builder(&conn)
+        .path(primary_path)?
+        .cache_properties(CacheProperties::No)
+        .build()
+        .await?;
 
-                if let Err(e) = property_sender.send(prop).await {
-                    error!("Failed to send prop to '{name}' receiver: {e}");
-                    return Err(NetError::SendError)
+    let devices = active_proxy.devices().await?;
+
+    // There should just be one device
+    // Safety: Having no active devices listening to the active connection should be impossible.
+    let device_path = devices
+        .into_iter()
+        .next()
+        .expect("Networkmanager failed to detect any devices for active connection!");
+
+    let stats_proxy = xmlgen::device::StatisticsProxy::builder(&conn)
+        .path(device_path)?
+        .cache_properties(CacheProperties::No)
+        .build()
+        .await?;
+
+    macro_rules! listen {
+        ($( $proxy:expr => $( $prop:tt ),+ );+) => {
+            async {
+                ::tokio::try_join!( $($( async {
+                    property_sender.send($proxy.$prop().await?.into()).await.map_err(|e| {
+                        error!("Failed to send current '{}' to format receiver: {e}", stringify!($prop));
+                        NetError::SendError
+                    })
+                } ),+),+ )?;
+
+                $($(
+                    ::paste::paste! {
+                        let mut [<$proxy _ $prop _stream>] = $proxy.[<receive_ $prop _changed>]().await;
+                    }
+                )+)+
+
+                loop {
+                    select! {
+                        biased;
+                        res = kill_receiver.recv_async() => {
+                            res.map_err(|e| {
+                                error!("Shutdown receiver returned an error: {e}");
+                                NetError::RecvError
+                            })?;
+                            break;
+                        }
+                        $($(
+                            Some(s) = ::paste::paste! {[<$proxy _ $prop _stream>]}.next() => {
+                                let raw_value = s.get().await?;
+                                let prop = raw_value.into();
+                                if let Err(e) = property_sender.send(prop).await {
+                                    error!("Failed to send {}::{} to receiver: {e}", stringify!($proxy), stringify!($prop));
+                                    return Err(NetError::SendError)
+                                }
+                            }
+                        )+)+
+                    }
                 }
+                Ok::<(), NetError>(())
             }
-        }
+        };
     }
 
-    // Ok(())
+    let listeners_future = listen![active_proxy => state; stats_proxy => rx_bytes, tx_bytes];
+
+    listeners_future.await?;
+
+    Ok::<(), NetError>(())
 }
+
+// async fn sub_listener<'p, T>(
+//     mut stream: PropertyStream<'p, T>,
+//     shutdown_receiver: Arc<flume::Receiver<()>>,
+//     property_sender: Arc<mpsc::Sender<PropertyType>>,
+// ) -> Result<(), NetError>
+// where
+//     T: std::marker::Unpin + TryFrom<zvariant::OwnedValue> + std::fmt::Debug + Into<PropertyType>,
+//     T::Error: Into<zbus::Error>,
+// {
+//     loop {
+//         select! { biased;
+//             res = shutdown_receiver.recv_async() => {
+//                 return res.map_err(|e| {
+//                     error!("Shutdown receiver returned an error: {e}");
+//                     NetError::RecvError
+//                 });
+//             }
+//             Some(s) = stream.next() => {
+//                 let raw_value = s.get().await?;
+
+//                 let prop = raw_value.into();
+
+//                 if let Err(e) = property_sender.send(prop).await {
+//                     error!("Failed to send prop to receiver: {e}");
+//                     return Err(NetError::SendError)
+//                 }
+//             }
+//         }
+//     }
+
+//     // Ok(())
+// }
 
 #[derive(Debug, strum_macros::Display, derive_more::From)]
 enum PropertyType {
