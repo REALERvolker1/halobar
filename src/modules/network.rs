@@ -360,6 +360,7 @@ async fn active_conn_listen<'c>(
 //     // Ok(())
 // }
 
+/// TODO: Formatter struct with format args listening for these in a task
 #[derive(Debug, strum_macros::Display, derive_more::From)]
 enum PropertyType {
     UpSpeed(variants::UpSpeed),

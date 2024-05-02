@@ -164,3 +164,99 @@ impl<T, const N: usize> FnTable<T, N> {
         Self(self.0)
     }
 }
+
+/// A simple formatter that formats any simple value that implements Display.
+///
+/// This takes any kind of [`FmtSegmentVec`] and replaces each truthy variable
+/// occurrence with the data from its [`std::fmt::Display`] impl indiscriminately.
+///
+///
+pub struct HaloDisplayFormatter<T: Truthy> {
+    data: T,
+    segvec: FmtSegmentVec,
+}
+impl<T: Truthy> HaloDisplayFormatter<T> {
+    /// Format this segmented string. This is relatively expensive.
+    pub fn format(&self) -> String {
+        let mut alloc = String::with_capacity(self.segvec.min_length);
+        for segment in self.segvec.segments() {
+            match segment {
+                Segment::Literal(l) => alloc.push_str(l),
+                Segment::Variable(v) => {
+                    if self.data.is_truthy() {
+                        alloc.push_str(&v.truthy(&self.data.to_string()))
+                    } else {
+                        alloc.push_str(&v.falsy)
+                    }
+                }
+            }
+        }
+
+        alloc
+    }
+}
+
+/// Make a struct that allows you to iterate over the keys of a struct.
+/// ```
+/// use halobar_config::key_struct;
+/// key_struct! {
+///     /// An example struct to demonstrate the `key_struct!` macro
+///     #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+///     pub struct Example {
+///         /// With attribute
+///         #[allow(dead_code)]
+///         pub name: String,
+///         age: usize,
+///         /// The user id of our example
+///         pub(crate) id: usize,
+///     }
+/// }
+///
+/// fn main() {
+///     let example: Example = Example {
+///         name: String::from("Bob"),
+///         age: 56,
+///         id: 16,
+///     };
+///
+///     assert_eq!(Example::KEYS.join(", "), "name, age, id");
+///     assert_eq!(Example::NUM_KEYS, 3);
+///
+///     let bob_age_reference: &usize = example.get_age();
+///     // Due to the declarative macro implementation, it always returns a reference, even for types implementing `Copy`.
+///     let bob_age: usize = *bob_age_reference;
+///
+///     assert_eq!(bob_age, 56);
+/// }
+/// ```
+#[macro_export]
+macro_rules! key_struct {
+    ( $( #[$struct_meta:meta] )* $struct_vis:vis struct $struct:ident { $( $( #[$field_meta:meta] )* $field_vis:vis $field:ident: $field_ty:ty ),+$(,)? } ) => {
+        $( #[$struct_meta] )*
+        $struct_vis struct $struct {
+            $(
+                $( #[$field_meta] )?
+                $field_vis $field: $field_ty,
+            )+
+        }
+        impl $struct {
+            /// The number of keys in this struct
+            pub const NUM_KEYS: usize = $crate::key_struct![_internal_key_count $( $field )+];
+            /// An array that contains all the keys of the struct.
+            pub const KEYS: [&'static str; Self::NUM_KEYS] = [$( stringify!($field) ),+];
+
+            ::paste::paste! {
+                $(
+                    #[doc = "Get a reference to `" $struct "::" $field "`"]
+                    $struct_vis fn [<get_ $field>]<'s>(&'s self) -> &'s $field_ty {
+                        &self.$field
+                    }
+                )+
+            }
+        }
+    };
+    (_internal_replace_expr $thing:tt $sub:expr) => {$sub};
+    (_internal_key_count $( $key:tt )*) => {
+        0usize $( + $crate::key_struct!(_internal_replace_expr $key 1usize) )*
+    };
+}
