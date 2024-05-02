@@ -3,8 +3,6 @@ mod xmlgen;
 // mod chosen;
 mod variants;
 
-use futures_util::stream::FuturesUnordered;
-use futures_util::StreamExt;
 use zbus::{
     proxy::{CacheProperties, PropertyStream},
     zvariant::OwnedObjectPath,
@@ -18,12 +16,25 @@ use self::{
 use super::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NetData {
+struct NetData {
     pub ssid: Option<Arc<String>>,
     pub device: Option<Arc<String>>,
     pub up_speed: Option<u64>,
     pub down_speed: Option<u64>,
     pub state: NMState,
+
+    pub is_online: bool,
+}
+impl NetData {
+    pub fn format_task(
+        &mut self,
+        format_str: &str,
+        output_sender: mpsc::Sender<String>,
+        mut property_receiver: mpsc::Receiver<PropertyType>,
+    ) -> Result<(), NetError> {
+        // let formatter = dyn_fmt::Arguments::new(format_str, )
+        todo!();
+    }
 }
 
 config_struct! {
@@ -66,13 +77,13 @@ impl NetIconKnown {
 //     format: FmtSegmentVec,
 //     format_offline: FmtSegmentVec,
 // }
-// impl HaloFormatter for FormatNet {
+// impl HaloFormatter<5> for FormatNet {
 //     type Data = NetData;
 //     fn current_data<'a>(&'a self) -> &'a Self::Data {
 //         &self.data
 //     }
 //     fn default_format_str() -> FormatStr {
-//         "{icon} {up_speed} UP, {down_speed} DOWN".into()
+//         "{icon} {up_speed} UP, {down_speed} DOWN".to_owned().into()
 //     }
 //     fn fn_table<'a>(&'a self) -> halobar_config::fmt::FnTable<Self::Data, 1> {
 //         FnTable([
@@ -82,7 +93,14 @@ impl NetIconKnown {
 //         ])
 //     }
 //     fn segments<'s>(&'s self) -> FmtSegments<'s> {
-//         if self.data.
+//         if self.data.is_online {
+//             self.format
+//         } else {
+//             self.format_offline
+//         }
+//     }
+//     fn set_data(&mut self, data: Self::Data) {
+//         self.data = data;
 //     }
 // }
 
@@ -326,39 +344,6 @@ async fn active_conn_listen<'c>(
 
     Ok::<(), NetError>(())
 }
-
-// async fn sub_listener<'p, T>(
-//     mut stream: PropertyStream<'p, T>,
-//     shutdown_receiver: Arc<flume::Receiver<()>>,
-//     property_sender: Arc<mpsc::Sender<PropertyType>>,
-// ) -> Result<(), NetError>
-// where
-//     T: std::marker::Unpin + TryFrom<zvariant::OwnedValue> + std::fmt::Debug + Into<PropertyType>,
-//     T::Error: Into<zbus::Error>,
-// {
-//     loop {
-//         select! { biased;
-//             res = shutdown_receiver.recv_async() => {
-//                 return res.map_err(|e| {
-//                     error!("Shutdown receiver returned an error: {e}");
-//                     NetError::RecvError
-//                 });
-//             }
-//             Some(s) = stream.next() => {
-//                 let raw_value = s.get().await?;
-
-//                 let prop = raw_value.into();
-
-//                 if let Err(e) = property_sender.send(prop).await {
-//                     error!("Failed to send prop to receiver: {e}");
-//                     return Err(NetError::SendError)
-//                 }
-//             }
-//         }
-//     }
-
-//     // Ok(())
-// }
 
 /// TODO: Formatter struct with format args listening for these in a task
 #[derive(Debug, strum_macros::Display, derive_more::From)]

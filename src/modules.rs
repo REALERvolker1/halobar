@@ -107,9 +107,9 @@ pub trait BackendModule1: Sized + Send {
 /// TODO: Document more
 pub struct BiChannel<T, F> {
     pub context: String,
-    pub sender: Sender<T>,
+    pub sender: mpsc::Sender<T>,
     /// This is an Option so that modules can acquire it in `async move` closures
-    pub receiver: Option<Receiver<F>>,
+    pub receiver: Option<mpsc::Receiver<F>>,
 }
 impl<T, F> BiChannel<T, F> {
     /// Create a new two-way mpsc channel. The buffer is the number of messages it holds before applying backpressure,
@@ -143,7 +143,7 @@ impl<T, F> BiChannel<T, F> {
     }
     /// Try to get this channel's receiver. Receivers are Options so that you can use them in `async move` infinite loops.
     #[inline]
-    pub fn get_receiver(&mut self) -> Option<Receiver<F>> {
+    pub fn get_receiver(&mut self) -> Option<mpsc::Receiver<F>> {
         self.receiver.take()
     }
     /// Try to send a message through the channel. If it succeeds, this returns true.

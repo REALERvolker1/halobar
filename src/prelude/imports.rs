@@ -2,6 +2,8 @@ pub(crate) use color_eyre::{
     eyre::{bail, eyre},
     Report,
 };
+pub(crate) use dyn_fmt::AsStrFormatExt;
+pub(crate) use futures_util::{stream::FuturesUnordered, StreamExt, TryStreamExt};
 pub(crate) use halobar_config::{
     config_struct,
     fmt::{FmtSegmentVec, FmtSegments, FnTable, FormatStr, HaloFormatter},
@@ -25,11 +27,7 @@ pub(crate) use std::{
 pub(crate) use strum::{EnumMessage, VariantArray, VariantNames};
 pub(crate) use tokio::{
     join, select,
-    sync::{
-        oneshot,
-        mpsc::{self, Receiver, Sender, UnboundedReceiver, UnboundedSender},
-        Mutex, RwLock, Semaphore,
-    },
+    sync::{mpsc, oneshot, Mutex, RwLock, Semaphore},
     try_join,
 };
 pub(crate) use tracing::{debug, error, info, instrument, trace, warn};

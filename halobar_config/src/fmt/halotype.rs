@@ -109,6 +109,47 @@ pub struct FmtSegments<'a> {
     pub inner: &'a [Segment],
     pub current_idx: usize,
 }
+impl<'a> FmtSegments<'a> {
+    /// Format a data slice of `[(key, value), (k, v)...]`, consuming the [`FmtSegments`].
+    ///
+    /// This slice is collected into a new hashmap, where it is passed to [`FmtSegments::format_map`].
+    pub fn format_data_slice<'b, D, I>(self, data: &[(&'b str, D)])
+    where
+        D: std::fmt::Display,
+    {
+        let data_iter = data.into_iter();
+    }
+    /// Format an entire data map of `"key": value`, consuming the [`FmtSegments`].
+    ///
+    /// Any variable whose key cannot be found in the map will be considered "falsy".
+    /// Any variable whose key-value pair is in the map is considered "truthy".
+    ///
+    /// This creates a new String with the minimum memory allocation size specified in the [`FmtSegments`].
+    pub fn format_map<'b, S: AsRef<str>, H: std::hash::BuildHasher>(
+        self,
+        data: &std::collections::HashMap<&'b str, S, H>,
+    ) -> String {
+        let mut output = String::with_capacity(self.min_len);
+
+        for segment in self {
+            match segment {
+                Segment::Literal(l) => output.push_str(l),
+                Segment::Variable(var) => {
+                    // I wanted to cache this but I couldn't figure out how to use the same hasher
+                    match data.get(var.ident.as_str()) {
+                        Some(data) => {
+                            let data_string = var.truthy(data.as_ref());
+                            output.push_str(&data_string);
+                        }
+                        None => {}
+                    };
+                }
+            }
+        }
+
+        output
+    }
+}
 impl<'a> Iterator for FmtSegments<'a> {
     type Item = &'a Segment;
     fn next(&mut self) -> Option<Self::Item> {
