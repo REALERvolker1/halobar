@@ -35,6 +35,8 @@ pub struct Variable {
     pub falsy: String,
     #[serde(skip)]
     pub(crate) content_position: VarContentType,
+    /// A helpful field that allows you to cache the last output for greater performance.
+    pub cached_value: Option<String>,
 }
 impl Variable {
     /// Get the correct string to show when the variable is truthy
@@ -124,7 +126,7 @@ impl<'a> FmtSegments<'a> {
     /// Any variable whose key cannot be found in the map will be considered "falsy".
     /// Any variable whose key-value pair is in the map is considered "truthy".
     ///
-    /// This creates a new String with the minimum memory allocation size specified in the [`FmtSegments`].
+    /// This creates a new String with the minimum memory allocation size specified in [`FmtSegments::min_len`].
     pub fn format_map<'b, S: AsRef<str>, H: std::hash::BuildHasher>(
         self,
         data: &std::collections::HashMap<&'b str, S, H>,
@@ -179,6 +181,53 @@ impl FmtSegmentVec {
             inner: self.inner.as_slice(),
             current_idx: 0,
         }
+    }
+    /// Format an entire data map of `"key": value`, analogous to [`FmtSegments::format_map`], but non-consuming.
+    ///
+    /// Keys pointing to values of `Some<D>` will be considered truthy. Those pointing to values of `None` will be considered falsy.
+    ///
+    /// Any variable whose key cannot be found in the map will either use the cached value, or be considered falsy.
+    ///
+    /// This creates a new String with the minimum memory allocation size specified in the [`FmtSegmentVec::min_length`] property.
+    pub fn format_map<'b, S: AsRef<str>, H: std::hash::BuildHasher>(
+        &mut self,
+        data: &std::collections::HashMap<&'b str, Option<S>, H>,
+    ) -> String {
+        let mut output = String::with_capacity(self.min_length);
+
+        for segment in self.inner.iter_mut() {
+            match segment {
+                Segment::Literal(l) => output.push_str(l.as_str()),
+                Segment::Variable(variable) => {
+                    let query = data.get(variable.ident.as_str());
+
+                    match query {
+                        Some(maybe_value) => match maybe_value {
+                            Some(value) => {
+                                let truthy = variable.truthy(value.as_ref());
+                                output.push_str(&truthy);
+
+                                variable.cached_value.replace(truthy);
+                            }
+
+                            None => {
+                                output.push_str(&variable.falsy);
+                                // Note to self: This only happens if the provided value was None.
+                                // It does not happen when getting the cached value.
+                                variable.cached_value.take();
+                            }
+                        },
+
+                        None => match variable.cached_value {
+                            Some(ref cached) => output.push_str(cached),
+                            None => output.push_str(&variable.falsy),
+                        },
+                    }
+                }
+            }
+        }
+
+        output
     }
 }
 
