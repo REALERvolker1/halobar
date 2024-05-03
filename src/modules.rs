@@ -114,9 +114,7 @@ pub trait BackendModule: Sized + Send {
     /// The type of error that the module can return
     type Error: Into<Report>;
     /// Get the requirements for this module to run. This is used to make sure we only initialize what we need.
-    ///
-    /// This takes self as a reference so you can compute this dynamically if you need to.
-    fn mod_requirements(&self) -> &[ModuleRequirement];
+    const MODULE_REQUIREMENTS: &'static [ModuleRequirementDiscriminants];
     /// The type of module this is. It is used to identify where the data should go.
     const MODULE_TYPE: ModuleType;
     /// The function that runs this module. Consider this function blocking.
@@ -152,118 +150,19 @@ pub trait BackendModule1: Sized + Send {
     // fn module_type() -> ModuleType;
 }
 
-/// A two-way mpsc channel.
-///
-/// TODO: Document more
-pub struct BiChannel<T, F> {
-    pub context: String,
-    pub sender: mpsc::Sender<T>,
-    /// This is an Option so that modules can acquire it in `async move` closures
-    pub receiver: Option<mpsc::Receiver<F>>,
-}
-impl<T, F> BiChannel<T, F> {
-    /// Create a new two-way mpsc channel. The buffer is the number of messages it holds before applying backpressure,
-    /// and the context is the string that it logs just in case of any errors during the course of its operation.
-    pub fn new<S: Into<String>>(
-        buffer: usize,
-        first_context: Option<S>,
-        second_context: Option<S>,
-    ) -> (BiChannel<T, F>, BiChannel<F, T>) {
-        let (sender1, receiver1) = mpsc::channel(buffer);
-        let (sender2, receiver2) = mpsc::channel(buffer);
-
-        (
-            BiChannel {
-                context: match first_context {
-                    Some(s) => s.into(),
-                    None => "None".to_owned(),
-                },
-                sender: sender1,
-                receiver: Some(receiver2),
-            },
-            BiChannel {
-                context: match second_context {
-                    Some(s) => s.into(),
-                    None => "None".to_owned(),
-                },
-                sender: sender2,
-                receiver: Some(receiver1),
-            },
-        )
-    }
-    /// Try to get this channel's receiver. Receivers are Options so that you can use them in `async move` infinite loops.
-    #[inline]
-    pub fn get_receiver(&mut self) -> Option<mpsc::Receiver<F>> {
-        self.receiver.take()
-    }
-    /// Try to send a message through the channel. If it succeeds, this returns true.
-    /// If it fails, it logs an error and returns false.
-    pub async fn send(&self, item: T) -> bool {
-        match self.sender.send(item).await {
-            Ok(()) => true,
-            Err(e) => {
-                error!(
-                    "Failed to send message to BiChannel({}): {e}",
-                    &self.context
-                );
-                false
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, strum_macros::Display)]
+/// A specific requirement that the module needs to work properly
+#[derive(Debug, strum_macros::EnumDiscriminants, strum_macros::EnumTryAs)]
+#[strum_discriminants(derive(Serialize, Deserialize, strum_macros::Display))]
 pub enum ModuleRequirement {
-    SystemDbus,
-    SessionDbus,
+    SystemDbus(SystemConnection),
+    SessionDbus(SessionConnection),
 }
-
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    Hash,
-    Serialize,
-    Deserialize,
-    strum_macros::Display,
-    strum_macros::AsRefStr,
-    strum_macros::EnumString,
-)]
-#[strum(serialize_all = "kebab-case")]
-#[serde(rename_all = "kebab-case")]
-pub enum ModuleType {
-    Time,
-    Network,
-}
-
-/// An enum to assist modules that have multiple formatting states
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum FormatState {
-    #[default]
-    Normal,
-    Alternate,
-}
-impl FormatState {
-    /// Switch the current state to the next available.
-    pub fn next(&mut self) {
-        let next = match self {
-            Self::Normal => Self::Alternate,
-            Self::Alternate => Self::Normal,
-        };
-        *self = next;
+impl ModuleRequirement {
+    /// Try to fulfill this
+    #[inline]
+    pub async fn fulfill_system_dbus(&self) -> zbus::Result<SystemConnection> {
+        SystemConnection::new().await
     }
-}
-
-/// Content that can be printed by the frontend.
-///
-/// To use this, impl `Into<DisplayOutput>` for `T`.
-///
-/// TODO: Finalize stuff required. This is just a string temporarily.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DisplayOutput {
-    pub inner: String,
-    pub mod_type: ModuleType,
 }
 
 /// The type of module that this is. This determines a lot about how it is run.
@@ -273,23 +172,4 @@ pub enum OutputType {
     OneShot(DisplayOutput),
     /// The module runs in a loop, pushing changes through its channel. The run function should never exit.
     Loop(BiChannel<Event, DisplayOutput>),
-}
-
-/// A [`zbus::Connection`] that contains a connection to the system bus
-#[derive(Debug, Clone, derive_more::AsRef)]
-pub struct SystemConnection(pub zbus::Connection);
-impl SystemConnection {
-    pub async fn new() -> zbus::Result<Self> {
-        let conn = zbus::Connection::system().await?;
-        Ok(Self(conn))
-    }
-}
-/// A [`zbus::Connection`] that contains a connection to the session bus
-#[derive(Debug, Clone, derive_more::AsRef)]
-pub struct SessionConnection(pub zbus::Connection);
-impl SessionConnection {
-    pub async fn new() -> zbus::Result<Self> {
-        let conn = zbus::Connection::session().await?;
-        Ok(Self(conn))
-    }
 }

@@ -126,10 +126,8 @@ pub struct Network {
 impl BackendModule for Network {
     type Error = NetError;
     type Input = (NetKnown, SystemConnection);
-    #[inline]
-    fn mod_requirements(&self) -> &[ModuleRequirement] {
-        &[ModuleRequirement::SystemDbus]
-    }
+    const MODULE_REQUIREMENTS: &'static [ModuleRequirementDiscriminants] =
+        &[ModuleRequirementDiscriminants::SystemDbus];
     const MODULE_TYPE: ModuleType = ModuleType::Network;
     // #[inline]
     // fn output_type(&self) -> OutputTypeDiscriminants {

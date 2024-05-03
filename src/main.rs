@@ -3,6 +3,7 @@
 pub mod globals;
 pub mod modules;
 mod prelude;
+pub mod types;
 
 #[cfg(target_os = "linux")]
 fn main() -> prelude::R<()> {
