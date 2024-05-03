@@ -126,10 +126,19 @@ pub struct Network {
 impl BackendModule for Network {
     type Error = NetError;
     type Input = (NetKnown, SystemConnection);
+    #[inline]
+    fn mod_requirements(&self) -> &[ModuleRequirement] {
+        &[ModuleRequirement::SystemDbus]
+    }
+    const MODULE_TYPE: ModuleType = ModuleType::Network;
+    // #[inline]
+    // fn output_type(&self) -> OutputTypeDiscriminants {
+    //     OutputTypeDiscriminants::Loop
+    // }
     async fn run(
         runtime: Arc<Runtime>,
         input: Self::Input,
-        yield_sender: Arc<mpsc::UnboundedSender<ModuleType>>,
+        yield_sender: Arc<mpsc::UnboundedSender<(OutputType, ModuleType)>>,
     ) -> Result<bool, Self::Error> {
         trace!("Starting module");
 
@@ -162,7 +171,7 @@ impl BackendModule for Network {
             Some("Networkmanager receiver"),
         );
         yield_sender
-            .send(ModuleType::Loop(output_receiver))
+            .send((OutputType::Loop(output_receiver), Self::MODULE_TYPE))
             .map_err(|e| {
                 error!("Failed to send message to agggregator: {e}");
                 NetError::SendError
