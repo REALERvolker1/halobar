@@ -1,9 +1,16 @@
 pub mod network;
 pub mod time;
+use tokio::runtime::Runtime;
+use tracing::Instrument;
 
 use crate::prelude::*;
 
-pub async fn run(runtime: &tokio::runtime::Runtime) -> R<()> {
+config_struct! {
+    [Modules]
+    start_timeout_seconds: u16 = 5,
+}
+
+pub async fn run(runtime: Arc<Runtime>, config: ModulesKnown) -> R<()> {
     // TODO: Make these in macros
     let time_config = time::TimeKnown::default();
     let (mut time_module, mut time_channel) = time::Time::new((), time_config).await?;
@@ -34,16 +41,23 @@ pub async fn run(runtime: &tokio::runtime::Runtime) -> R<()> {
         }
     });
 
-    let dbus_conn = zbus::Connection::system().await?;
+    let system_conn = SystemConnection::new().await?;
 
-    let my_conn = dbus_conn.clone();
+    // Each module must send a listener to this channel when they are ready to push data.
+    let (sender, module_receiver) = mpsc::unbounded_channel();
+    let sender = Arc::new(sender);
 
-    let (sender, network_receiver) = oneshot::channel();
+    let my_conn = system_conn.clone();
+    let my_sender = Arc::clone(&sender);
+    let my_rt = Arc::clone(&runtime);
+
     runtime.spawn(async move {
-        let config = network::NetKnown::default();
-        network::Network::init(config, my_conn, sender).await?;
+        let config = network::NetKnown::default(); // init(config, my_conn, sender).await?;
+        network::Network::run(my_rt, (config, my_conn), my_sender).await?;
         Ok::<_, Report>(())
     });
+
+    // receive them all -- This stops when it has either accounted for all messages, or has waited for the timeout.
 
     tokio::task::block_in_place(|| loop {});
     Ok(())
@@ -59,8 +73,6 @@ macro_rules! proxy {
     };
 }
 pub use proxy;
-use tokio::runtime::Runtime;
-use tracing::Instrument;
 
 /// A module that can be used in the backend to provide data.
 pub trait BackendModule: Sized + Send {
@@ -74,10 +86,10 @@ pub trait BackendModule: Sized + Send {
     /// Important: If it is a oneshot with no events, please specify! If it has to receive events, make it a loop.
     ///
     /// If it was expected to return, it will return `Ok(true)`. A bool value of `false` indicates it was supposed to run forever.
-    async fn run<'r, D: Into<DisplayOutput>>(
+    async fn run(
         runtime: Arc<Runtime>,
         input: Self::Input,
-        yield_sender: Arc<mpsc::Sender<ModuleType<D>>>,
+        yield_sender: Arc<mpsc::UnboundedSender<ModuleType>>,
     ) -> Result<bool, Self::Error>;
 }
 
@@ -191,11 +203,11 @@ impl FormatState {
 pub struct DisplayOutput(String);
 
 /// The type of module that this is. This determines a lot about how it is run.
-pub enum ModuleType<D: Into<DisplayOutput>> {
+pub enum ModuleType {
     /// The module returns a constant through its channel on start, and is not run.
-    OneShot(D),
+    OneShot(DisplayOutput),
     /// The module runs in a loop, pushing changes through its channel. The run function should never exit.
-    Loop(BiChannel<Event, D>),
+    Loop(BiChannel<Event, DisplayOutput>),
 }
 
 /// A [`zbus::Connection`] that contains a connection to the system bus

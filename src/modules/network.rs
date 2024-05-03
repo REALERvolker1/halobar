@@ -3,6 +3,7 @@ mod xmlgen;
 // mod chosen;
 mod variants;
 
+use futures_util::TryFutureExt;
 use zbus::{
     proxy::{CacheProperties, PropertyStream},
     zvariant::OwnedObjectPath,
@@ -14,28 +15,6 @@ use self::{
 };
 
 use super::*;
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct NetData {
-    pub ssid: Option<Arc<String>>,
-    pub device: Option<Arc<String>>,
-    pub up_speed: Option<u64>,
-    pub down_speed: Option<u64>,
-    pub state: NMState,
-
-    pub is_online: bool,
-}
-impl NetData {
-    pub fn format_task(
-        &mut self,
-        format_str: &str,
-        output_sender: mpsc::Sender<String>,
-        mut property_receiver: mpsc::Receiver<PropertyType>,
-    ) -> Result<(), NetError> {
-        // let formatter = dyn_fmt::Arguments::new(format_str, )
-        todo!();
-    }
-}
 
 config_struct! {
     [NetIcon]
@@ -71,38 +50,23 @@ impl NetIconKnown {
     }
 }
 
-// struct FormatNet {
-//     data: NetData,
-//     /// TODO: Allow choosing decimal rounding
-//     format: FmtSegmentVec,
-//     format_offline: FmtSegmentVec,
-// }
-// impl HaloFormatter<5> for FormatNet {
-//     type Data = NetData;
-//     fn current_data<'a>(&'a self) -> &'a Self::Data {
-//         &self.data
-//     }
-//     fn default_format_str() -> FormatStr {
-//         "{icon} {up_speed} UP, {down_speed} DOWN".to_owned().into()
-//     }
-//     fn fn_table<'a>(&'a self) -> halobar_config::fmt::FnTable<Self::Data, 1> {
-//         FnTable([
-//             ("icon", |data| Some(data.state.state_icon().to_string())),
-//             ("up_speed", |data| Some(format!("{}", data.up_speed))),
-//             ("down_speed", |data| Some(format!("{}", data.down_speed))),
-//         ])
-//     }
-//     fn segments<'s>(&'s self) -> FmtSegments<'s> {
-//         if self.data.is_online {
-//             self.format
-//         } else {
-//             self.format_offline
-//         }
-//     }
-//     fn set_data(&mut self, data: Self::Data) {
-//         self.data = data;
-//     }
-// }
+struct FormatNet {
+    /// TODO: Allow choosing decimal rounding
+    format: FmtSegmentVec,
+    format_offline: FmtSegmentVec,
+
+    state: Cell<FormatState>,
+}
+impl FormatNet {
+    pub async fn format_task(
+        self,
+        output_sender: mpsc::Sender<String>,
+        mut format_receiver: mpsc::Receiver<PropertyType>,
+    ) -> ! {
+        while let Some(prop) = format_receiver.recv().await {}
+        unreachable!("Format task closed unexpectedly!");
+    }
+}
 
 config_struct! {
     [Net]
@@ -112,6 +76,7 @@ config_struct! {
     show_device: bool = true,
     show_state: bool = true,
     // format: FormatStr = FormatStr::default(),
+    poll_rate_seconds: u64 = 5,
 }
 impl NetKnown {
     pub fn is_valid(&self) -> bool {
@@ -161,10 +126,10 @@ pub struct Network {
 impl BackendModule for Network {
     type Error = NetError;
     type Input = (NetKnown, SystemConnection);
-    async fn run<'r, D: Into<DisplayOutput>>(
+    async fn run(
         runtime: Arc<Runtime>,
         input: Self::Input,
-        yield_sender: Arc<mpsc::Sender<ModuleType<D>>>,
+        yield_sender: Arc<mpsc::UnboundedSender<ModuleType>>,
     ) -> Result<bool, Self::Error> {
         trace!("Starting module");
 
@@ -181,7 +146,7 @@ impl BackendModule for Network {
             .build()
             .await?;
 
-        let mut primary_path = network_manager.primary_connection().await?;
+        let primary_path = network_manager.primary_connection().await?;
 
         let mut primary_stream = network_manager.receive_primary_connection_changed().await;
 
@@ -198,7 +163,6 @@ impl BackendModule for Network {
         );
         yield_sender
             .send(ModuleType::Loop(output_receiver))
-            .await
             .map_err(|e| {
                 error!("Failed to send message to agggregator: {e}");
                 NetError::SendError
@@ -206,9 +170,11 @@ impl BackendModule for Network {
 
         let format_task = runtime.spawn(async move {
             while let Some(prop) = property_receiver.recv().await {
-                debug!("Format task received prop: {}", prop);
+                debug!("Format task received prop: {:?}", prop);
             }
         });
+
+        let config = Arc::new(config);
 
         let mut current_listener: Option<tokio::task::JoinHandle<Result<(), NetError>>> =
             Some(tokio::spawn(active_conn_listen(
@@ -216,6 +182,7 @@ impl BackendModule for Network {
                 conn.clone(),
                 Arc::clone(&kill_receiver),
                 Arc::clone(&property_sender),
+                Arc::clone(&config),
             )));
 
         // I split this into its own future because I want to be able to run cleanup code after it throws errors at me
@@ -239,13 +206,14 @@ impl BackendModule for Network {
                         }
                     };
                 }
-                primary_path = maybe_path.get().await?;
+                let primary_path = maybe_path.get().await?;
 
                 current_listener.replace(tokio::spawn(active_conn_listen(
                     primary_path,
                     conn.clone(),
                     Arc::clone(&kill_receiver),
                     Arc::clone(&property_sender),
+                    Arc::clone(&config),
                 )));
             }
 
@@ -271,6 +239,7 @@ async fn active_conn_listen<'c>(
     conn: zbus::Connection,
     kill_receiver: Arc<flume::Receiver<()>>,
     property_sender: Arc<mpsc::Sender<PropertyType>>,
+    config: Arc<NetKnown>,
 ) -> Result<(), NetError> {
     trace!("Creating ActiveProxy from path '{primary_path}'");
 
@@ -280,26 +249,48 @@ async fn active_conn_listen<'c>(
         .build()
         .await?;
 
-    let devices = active_proxy.devices().await?;
+    let stats_proxy_future = async {
+        let devices = active_proxy.devices().await?;
 
-    // There should just be one device
-    // Safety: Having no active devices listening to the active connection should be impossible.
-    let device_path = devices
-        .into_iter()
-        .next()
-        .expect("Networkmanager failed to detect any devices for active connection!");
+        let device_path = match devices.into_iter().next() {
+            Some(d) => d,
+            None => {
+                error!("Failed to detect any devices for active connection!");
+                return Err(NetError::NetDisabled);
+            }
+        };
 
-    let stats_proxy = xmlgen::device::StatisticsProxy::builder(&conn)
-        .path(device_path)?
-        .cache_properties(CacheProperties::No)
-        .build()
-        .await?;
+        let proxy = xmlgen::device::StatisticsProxy::builder(&conn)
+            .path(device_path)?
+            .cache_properties(CacheProperties::No)
+            .build()
+            .await?;
 
+        Ok::<_, NetError>(proxy)
+    };
+
+    let access_point_future = async {
+        let access_path = active_proxy.connection().await?;
+
+        let proxy = xmlgen::access_point::AccessPointProxy::builder(&conn)
+            .path(access_path)?
+            .cache_properties(CacheProperties::No)
+            .build()
+            .await?;
+        Ok::<_, NetError>(proxy)
+    };
+
+    let (stats_proxy, access_point_proxy) =
+        tokio::try_join!(stats_proxy_future, access_point_future)?;
+
+    let net_poll_duration = Duration::from_secs(config.poll_rate_seconds);
+
+    // Good luck maintaining this one, nerd
     macro_rules! listen {
-        ($( $proxy:expr => $( $prop:tt ),+ );+) => {
+        ($( $proxy:expr => $( $prop:tt: $prop_type:ident ),+ );+ $(speed_poll: $speed_poll:expr)?) => {
             async {
                 ::tokio::try_join!( $($( async {
-                    property_sender.send($proxy.$prop().await?.into()).await.map_err(|e| {
+                    property_sender.send(PropertyType::$prop_type($proxy.$prop().await?)).await.map_err(|e| {
                         error!("Failed to send current '{}' to format receiver: {e}", stringify!($prop));
                         NetError::SendError
                     })
@@ -324,33 +315,81 @@ async fn active_conn_listen<'c>(
                         $($(
                             Some(s) = ::paste::paste! {[<$proxy _ $prop _stream>]}.next() => {
                                 let raw_value = s.get().await?;
-                                let prop = raw_value.into();
+                                let prop = PropertyType::$prop_type(raw_value);
                                 if let Err(e) = property_sender.send(prop).await {
                                     error!("Failed to send {}::{} to receiver: {e}", stringify!($proxy), stringify!($prop));
                                     return Err(NetError::SendError)
                                 }
                             }
                         )+)+
+
+                        $(
+                            res = $speed_poll.await => {
+                                res?;
+                            }
+                        )?
                     }
                 }
                 Ok::<(), NetError>(())
             }
         };
+        (speed_poll: $($poll_fn:tt $prop_type:ident),+) => {
+            // The network speed must be polled in timed intervals
+            async {
+                tokio::try_join!($( async {
+                    let mut previous_bytes = 0;
+
+                    let mut last_check = Instant::now();
+
+                    loop {
+                        // TODO: Find a better way to do this
+                        if kill_receiver.try_recv().is_ok() {
+                            break;
+                        }
+                        let bytes = stats_proxy.$poll_fn().await?;
+
+                        // I measure it this way because it allows me to just keep the time since last check
+                        let current_check = Instant::now();
+                        let duration = current_check.duration_since(last_check);
+                        last_check = current_check;
+
+                        let difference = *bytes - previous_bytes;
+                        let duration_seconds = duration.as_secs_f64();
+                        let bytes_per_second = difference as f64 / duration_seconds;
+
+                        previous_bytes = *bytes;
+
+                        let send_future =
+                            property_sender.send(PropertyType::$prop_type(Size::from_bytes(bytes_per_second)));
+
+                        let (send, _) = tokio::join!(send_future, tokio::time::sleep(net_poll_duration));
+
+                        if let Err(e) = send {
+                            error!("Failed to send {} to receiver: {e}", stringify!($prop_type));
+                            return Err(NetError::SendError);
+                        }
+                    }
+                    Ok::<(), NetError>(())
+                } ),+)
+            }
+        };
     }
 
-    let listeners_future = listen![active_proxy => state; stats_proxy => rx_bytes, tx_bytes];
+    let speed_polls = listen![speed_poll: tx_bytes UpSpeed, rx_bytes DownSpeed];
+    let listeners_future = listen![active_proxy => state: ActiveConnectionState; access_point_proxy => ssid: Ssid, strength: Strength];
 
-    listeners_future.await?;
+    tokio::try_join!(speed_polls, listeners_future)?;
 
     Ok::<(), NetError>(())
 }
 
 /// TODO: Formatter struct with format args listening for these in a task
-#[derive(Debug, strum_macros::Display, derive_more::From)]
+#[derive(Debug)]
 enum PropertyType {
-    UpSpeed(variants::UpSpeed),
-    DownSpeed(variants::DownSpeed),
+    UpSpeed(Size),
+    DownSpeed(Size),
     Ssid(variants::Ssid),
     IfaceName(String),
+    Strength(u8),
     ActiveConnectionState(variants::NMActiveConnectionState),
 }

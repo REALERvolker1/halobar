@@ -869,8 +869,10 @@ owned_repr!(NMActivationStateFlags);
     Serialize,
     derive_more::From,
     derive_more::Display,
+    derive_more::Deref,
+    derive_more::AsRef,
 )]
-pub struct UpSpeed(u64);
+pub struct UpSpeed(pub u64);
 impl TryFrom<zvariant::OwnedValue> for UpSpeed {
     type Error = zvariant::Error;
     fn try_from(value: zvariant::OwnedValue) -> Result<Self, Self::Error> {
@@ -895,8 +897,10 @@ impl TryFrom<zvariant::OwnedValue> for UpSpeed {
     Serialize,
     derive_more::From,
     derive_more::Display,
+    derive_more::Deref,
+    derive_more::AsRef,
 )]
-pub struct DownSpeed(u64);
+pub struct DownSpeed(pub u64);
 impl TryFrom<zvariant::OwnedValue> for DownSpeed {
     type Error = zvariant::Error;
     fn try_from(value: zvariant::OwnedValue) -> Result<Self, Self::Error> {

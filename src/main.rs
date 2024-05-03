@@ -20,8 +20,11 @@ fn main() -> prelude::R<()> {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
+    let rt = prelude::Arc::new(rt);
 
-    rt.block_on(modules::run(&rt))?;
+    let config = modules::ModulesKnown::default();
+
+    rt.clone().block_on(modules::run(rt, config))?;
 
     Ok(())
 }
