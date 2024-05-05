@@ -49,7 +49,6 @@ macro_rules! data_flags {
 
                     match message {
                         $( &[<$name:upper _ENUM_VARIANT>] => self.$name, )+
-                        _ => false,
                     }
                 }
             }
