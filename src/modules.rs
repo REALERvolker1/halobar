@@ -115,7 +115,7 @@ pub trait BackendModule: Sized + Send {
     type Error: Into<Report>;
     /// Get the requirements for this module to run. This is used to make sure we only initialize what we need.
     const MODULE_REQUIREMENTS: &'static [ModuleRequirementDiscriminants];
-    /// The type of module this is. It is used to identify where the data should go.
+    /// The type of module this is.
     const MODULE_TYPE: ModuleType;
     /// The function that runs this module. Consider this function blocking.
     ///

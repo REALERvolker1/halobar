@@ -51,23 +51,35 @@ pub struct ModuleIdentity {
 impl ModuleIdentity {
     /// Create a new Module identity. This has a slight synchronization cost.
     ///
-    /// It will fail if there are more than the maximum amount allowed by the underlying integer.
-    pub fn new(module_type: ModuleType) -> Option<Self> {
-        if let Ok(id) =
-            NEXT_MODULE_ID.fetch_update(Ordering::Release, Ordering::Acquire, |former| {
+    /// It will PANIC if there are more than the maximum amount allowed by the underlying integer.
+    pub fn new(module_type: ModuleType) -> Self {
+        const OVERFLOW_MSG: &str =
+            "Failed to create a new module ID, you have reached the module limit!";
+
+        let id = NEXT_MODULE_ID
+            .fetch_update(Ordering::Release, Ordering::Acquire, |former| {
                 if former == u8::MAX {
-                    error!("Failed to create a new module ID, you have reached the module limit!");
+                    error!("{OVERFLOW_MSG}");
                     return None;
                 }
                 Some(former + 1)
             })
-        {
-            return Some(Self {
-                inner: Arc::new(ModuleIdentityInner { module_type, id }),
-            });
-        };
+            // safety: Who would ever need more than 256 modules? lol
+            .expect(OVERFLOW_MSG);
 
-        None
+        Self {
+            inner: Arc::new(ModuleIdentityInner { module_type, id }),
+        }
+    }
+    /// Get a reference to this module's mod type
+    #[inline]
+    pub fn mod_type<'i>(&'i self) -> &'i ModuleType {
+        &self.inner.module_type
+    }
+    /// Get a reference to this module's ID
+    #[inline]
+    pub fn id(&self) -> u8 {
+        self.inner.id
     }
 }
 impl std::fmt::Debug for ModuleIdentity {

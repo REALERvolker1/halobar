@@ -155,8 +155,6 @@ impl BackendModule for Network {
 
         let primary_path = network_manager.primary_connection().await?;
 
-        let mut primary_stream = network_manager.receive_primary_connection_changed().await;
-
         let (s, mut property_receiver) = mpsc::channel(8);
         let property_sender = Arc::new(s);
 
@@ -184,13 +182,15 @@ impl BackendModule for Network {
         let config = Arc::new(config);
 
         let mut current_listener: Option<tokio::task::JoinHandle<Result<(), NetError>>> =
-            Some(tokio::spawn(active_conn_listen(
+            Some(runtime.spawn(active_conn_listen(
                 primary_path.clone(),
                 conn.clone(),
                 Arc::clone(&kill_receiver),
                 Arc::clone(&property_sender),
                 Arc::clone(&config),
             )));
+
+        let mut primary_stream = network_manager.receive_primary_connection_changed().await;
 
         // I split this into its own future because I want to be able to run cleanup code after it throws errors at me
         let primary_stream_listener = async {
