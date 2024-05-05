@@ -1,4 +1,5 @@
-pub mod network;
+// pub mod network;
+pub mod network_manager;
 pub mod time;
 use tokio::runtime::Runtime;
 use tracing::Instrument;
@@ -7,7 +8,7 @@ use crate::prelude::*;
 
 config_struct! {
     [Modules]
-    @conf network: network => Net,
+    // @conf network: network => Net,
     start_timeout_seconds: u64 = 5,
 }
 
@@ -15,7 +16,7 @@ pub async fn run(runtime: Arc<Runtime>, config: ModulesKnown) -> R<()> {
     // TODO: Make these in macros
     let system_conn = SystemConnection::new().await?;
 
-    let mut expected_module_types = AHashSet::new();
+    let mut expected_module_types: AHashSet<ModuleType> = AHashSet::new();
 
     // Each module must send a listener to this channel when they are ready to push data.
     let (sender, mut module_receiver) = mpsc::unbounded_channel();
@@ -25,16 +26,16 @@ pub async fn run(runtime: Arc<Runtime>, config: ModulesKnown) -> R<()> {
     let my_sender = Arc::clone(&sender);
     let my_rt = Arc::clone(&runtime);
 
-    if expected_module_types.contains(&network::Network::MODULE_TYPE) {
-        bail!("Duplicate module found: {}!", network::Network::MODULE_TYPE);
-    }
-    expected_module_types.insert(network::Network::MODULE_TYPE);
+    // if expected_module_types.contains(&network::Network::MODULE_TYPE) {
+    //     bail!("Duplicate module found: {}!", network::Network::MODULE_TYPE);
+    // }
+    // expected_module_types.insert(network::Network::MODULE_TYPE);
 
-    runtime.spawn(async move {
-        let config = config.network;
-        network::Network::run(my_rt, (config, my_conn), my_sender).await?;
-        Ok::<_, Report>(())
-    });
+    // runtime.spawn(async move {
+    //     let config = config.network;
+    //     network::Network::run(my_rt, (config, my_conn), my_sender).await?;
+    //     Ok::<_, Report>(())
+    // });
 
     // receive them all -- This stops when it has either accounted for all messages, or has waited for the timeout.
     // I made it this way because rust doesn't have generator functions, and I needed a way for functions to yield values
@@ -172,4 +173,32 @@ pub enum OutputType {
     OneShot(DisplayOutput),
     /// The module runs in a loop, pushing changes through its channel. The run function should never exit.
     Loop(BiChannel<Event, DisplayOutput>),
+}
+
+/// The type of module this is. This should contain every single different type of module.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    strum_macros::Display,
+    strum_macros::AsRefStr,
+    strum_macros::EnumString,
+)]
+#[strum(serialize_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
+pub enum ModuleType {
+    Time,
+    Network,
+}
+
+#[derive(Debug, strum_macros::Display, Serialize, Deserialize)]
+pub enum ModuleData {
+    Time(),
+    NetworkManager(network_manager::NMPropertyType)
 }
