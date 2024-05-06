@@ -34,12 +34,12 @@ impl NMPropertyFlags {
     /// Whether to show the active wifi access point
     #[inline]
     pub fn access_point_props(&self) -> bool {
-        self.ssid | self.strength | self.mode | self.device_props()
+        self.ssid | self.strength | self.mode
     }
     /// Whether to create/use the active device proxy or not
     #[inline]
     pub fn device_props(&self) -> bool {
-        self.speed_props() | self.iface_name
+        self.speed_props() | self.iface_name | self.access_point_props()
     }
     /// Whether to create/use the active connection proxy or not
     #[inline]
