@@ -1,6 +1,9 @@
 mod listener;
 mod props;
 mod variants;
+mod xmlgen;
 
-pub use props::NMPropertyType;
+pub use props::*;
 pub use variants::NMActiveConnectionState;
+
+use crate::prelude::*;

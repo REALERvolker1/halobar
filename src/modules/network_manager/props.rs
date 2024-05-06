@@ -1,5 +1,7 @@
-use super::variants::{NMActiveConnectionState, NMState};
-use crate::prelude::{config_struct, data_flags, Deserialize, Serialize};
+use super::{
+    variants::{NMActiveConnectionState, NMState},
+    *,
+};
 
 #[derive(Debug, strum_macros::Display, Serialize, Deserialize, strum_macros::EnumDiscriminants)]
 pub enum NMPropertyType {
@@ -61,3 +63,41 @@ impl NMIconsKnown {
         }
     }
 }
+
+#[derive(Debug, thiserror::Error)]
+pub enum NetError {
+    #[error("Invalid interface: {0}")]
+    InvalidInterface(String),
+    #[error("{0}")]
+    Io(#[from] tokio::io::Error),
+    #[error("Error parsing integer: {0}")]
+    ParseInt(#[from] std::num::ParseIntError),
+    #[error("zbus error: {0}")]
+    Zbus(#[from] zbus::Error),
+    #[error("Networking disabled")]
+    NetDisabled,
+    #[error("Failed to send message to channel")]
+    SendError,
+    #[error("Failed to receive message from channel")]
+    RecvError,
+    #[error("Failed to join task")]
+    JoinError,
+}
+
+macro_rules! from_send {
+    ($enum:ident :: $enum_kind:tt: $( $err_type:ty $( = $generics:tt )? ),+) => {
+        $(
+            impl$(<$generics>)? From<$err_type> for $enum {
+                #[inline]
+                fn from(_: $err_type) -> Self {
+                    Self::$enum_kind
+                }
+            }
+        )+
+    };
+}
+
+from_send! [NetError :: SendError: flume::SendError<T> = T, flume::TrySendError<T> = T, flume::SendTimeoutError<T> = T, mpsc::error::SendError<T> = T];
+from_send! [NetError :: SendError: flume::RecvError, flume::TryRecvError, flume::RecvTimeoutError, mpsc::error::TryRecvError];
+
+pub type NetResult<T> = std::result::Result<T, NetError>;
