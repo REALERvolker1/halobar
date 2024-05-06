@@ -1,68 +1,10 @@
-use self::xmlgen::active_connection::ActiveProxy;
-
 use super::*;
-use listener::xmlgen::network_manager::NetworkManagerProxy;
-use xmlgen::device::{DeviceProxy, StatisticsProxy};
+use xmlgen::{
+    active_connection::ActiveProxy,
+    device::{DeviceProxy, StatisticsProxy},
+    network_manager::NetworkManagerProxy,
+};
 use zbus::{proxy::CacheProperties, zvariant::OwnedObjectPath};
-
-#[derive(Debug)]
-pub(super) struct Speed<'c> {
-    pub rx_total: u64,
-    pub tx_total: u64,
-
-    pub rx_per_second: Size,
-    pub tx_per_second: Size,
-
-    pub last_checked: Instant,
-    pub proxy: StatisticsProxy<'c>,
-}
-impl<'c> Speed<'c> {
-    #[instrument(level = "debug")]
-    pub async fn new(conn: &'c SystemConnection, device_path: OwnedObjectPath) -> NetResult<Self> {
-        let proxy = StatisticsProxy::builder(&conn.0)
-            .path(device_path)?
-            .cache_properties(CacheProperties::No)
-            .build()
-            .await?;
-
-        let (tx_total, rx_total) = try_join![proxy.tx_bytes(), proxy.rx_bytes()]?;
-
-        Ok(Self {
-            rx_total: rx_total.0,
-            tx_total: tx_total.0,
-            rx_per_second: Size::from_const(0),
-            tx_per_second: Size::from_const(0),
-            last_checked: Instant::now(),
-            proxy,
-        })
-    }
-    #[instrument(level = "trace")]
-    pub async fn refresh(&mut self) -> NetResult<()> {
-        let (tx_bytes, rx_bytes) = try_join![self.proxy.tx_bytes(), self.proxy.rx_bytes()]?;
-        let checked_at = Instant::now();
-        let time_interval = self.last_checked.duration_since(checked_at);
-        let time_interval_seconds = time_interval.as_secs_f64();
-
-        macro_rules! diff {
-            ($type:tt) => {
-                ::paste::paste! {{
-                    let diff = self.[<$type _total>] - [<$type _bytes>].0;
-                    let bytes_per_second = diff as f64 / time_interval_seconds;
-
-                    Size::from_bytes(bytes_per_second)
-                }}
-            };
-        }
-
-        self.rx_per_second = diff!(rx);
-        self.tx_per_second = diff!(tx);
-        self.tx_total = tx_bytes.0;
-        self.rx_total = rx_bytes.0;
-        self.last_checked = checked_at;
-
-        Ok(())
-    }
-}
 
 pub(super) struct Listener<'c> {
     pub device_name: Option<Arc<String>>,
@@ -75,6 +17,7 @@ pub(super) struct Listener<'c> {
 }
 impl<'c> Listener<'c> {
     /// Create the active
+    #[instrument(level = "debug", skip(conn))]
     pub async fn new(conn: &'c zbus::Connection, config: NetKnown) -> NetResult<Option<Self>> {
         // if it was killed already, just skip it!
         // TODO: Move into individual device/conn listener
@@ -100,19 +43,30 @@ impl<'c> Listener<'c> {
     }
 }
 
+#[instrument(level = "debug", skip_all)]
 async fn listener<'c>(
     conn: &'c zbus::Connection,
     kill_receiver: Arc<flume::Receiver<()>>,
     property_sender: Arc<mpsc::Sender<NMPropertyType>>,
+    config: NMPropertyFlags,
+    device_name: Option<&str>,
 ) -> NetResult<()> {
     if !kill_receiver.is_empty() {
         return Err(NetError::InvalidState(
             "New listener created while kill channel has a value!",
         ));
     }
+
+    // let mut poll_collection = FuturesUnordered::new();
+
+    // if config.speed_props() {
+    //     // poll_collection.push(future)
+    // }
+
     todo!();
 }
 
+#[instrument(level = "trace", skip_all)]
 async fn active_from_device<'c>(
     conn: &'c zbus::Connection,
     proxy: DeviceProxy<'c>,
@@ -129,6 +83,7 @@ async fn active_from_device<'c>(
     Ok(active)
 }
 
+#[instrument(level = "trace", skip_all)]
 async fn device_from_active<'c>(
     conn: &'c zbus::Connection,
     proxy: ActiveProxy<'c>,

@@ -23,6 +23,18 @@ data_flags! {
         state => ActiveConnectionState,
     }
 }
+impl NMPropertyFlags {
+    /// Whether to create the network speed polling listener
+    #[inline]
+    pub fn speed_props(&self) -> bool {
+        self.up_speed | self.down_speed
+    }
+    /// Whether to show the active wifi access point
+    #[inline]
+    pub fn wifi_point_props(&self) -> bool {
+        self.ssid | self.strength
+    }
+}
 
 config_struct! {
     [Net]
