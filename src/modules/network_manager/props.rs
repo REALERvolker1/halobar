@@ -1,5 +1,5 @@
 use super::{
-    variants::{NMActiveConnectionState, NMState},
+    variants::{NM80211Mode, NMActiveConnectionState, NMState},
     *,
 };
 
@@ -11,6 +11,7 @@ pub enum NMPropertyType {
     IfaceName(String),
     Strength(u8),
     ActiveConnectionState(NMActiveConnectionState),
+    Mode(NM80211Mode),
 }
 
 data_flags! {
@@ -21,6 +22,7 @@ data_flags! {
         iface_name => IfaceName,
         strength => Strength,
         state => ActiveConnectionState,
+        mode => Mode,
     }
 }
 impl NMPropertyFlags {
@@ -31,8 +33,18 @@ impl NMPropertyFlags {
     }
     /// Whether to show the active wifi access point
     #[inline]
-    pub fn wifi_point_props(&self) -> bool {
-        self.ssid | self.strength
+    pub fn access_point_props(&self) -> bool {
+        self.ssid | self.strength | self.mode | self.device_props()
+    }
+    /// Whether to create/use the active device proxy or not
+    #[inline]
+    pub fn device_props(&self) -> bool {
+        self.speed_props() | self.iface_name
+    }
+    /// Whether to create/use the active connection proxy or not
+    #[inline]
+    pub fn active_conn_props(&self) -> bool {
+        self.state
     }
 }
 
