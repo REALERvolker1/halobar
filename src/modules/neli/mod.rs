@@ -1,9 +1,7 @@
-use std::{ffi::OsString, os::unix::ffi::OsStringExt};
-
-use neli_wifi::{Bss, Station};
-
+mod props;
 use super::*;
 
+/// https://github.com/greshake/i3status-rust/blob/fc5a3f69a1b7cfc1fcb636ea05a46f08b7f4b095/src/netlink.rs
 #[derive(Debug, Default, Clone, Copy)]
 pub struct InterfaceStats {
     pub rx_bytes: u64,
@@ -19,28 +17,7 @@ impl std::ops::Sub for InterfaceStats {
     }
 }
 
-// From `linux/rtnetlink.h`
-// const RT_SCOPE_HOST: c_uchar = 254;
-
-// #[derive(Debug)]
-// pub struct NetDevice {
-//     pub iface: Interface,
-//     pub wifi_info: Option<WifiInfo>,
-//     pub ip: Option<Ipv4Addr>,
-//     pub ipv6: Option<Ipv6Addr>,
-//     pub icon: &'static str,
-//     pub tun_wg_ppp: bool,
-// }
-
-#[derive(Debug, Default)]
-pub struct WifiInfo {
-    pub ssid: Option<String>,
-    pub signal: Option<f64>,
-    pub frequency: Option<f64>,
-    pub bitrate: Option<f64>,
-}
-
-/// https://github.com/greshake/i3status-rust/blob/fc5a3f69a1b7cfc1fcb636ea05a46f08b7f4b095/src/netlink.rs#L431
+/// https://github.com/greshake/i3status-rust/blob/fc5a3f69a1b7cfc1fcb636ea05a46f08b7f4b095/src/netlink.rs
 ///
 /// Original Source: https://www.kernel.org/doc/Documentation/networking/operstates.txt
 #[derive(Debug, PartialEq, Eq)]
@@ -83,7 +60,7 @@ impl From<u8> for Operstate {
 pub type NeliDeviceIndex = i32;
 
 #[derive(Debug, Default, derive_more::Display)]
-#[display(fmt = "{}. {}: {}", device_index, name, ssid)]
+#[display(fmt = "{}. {}: {}", index, name, ssid)]
 pub struct WifiInterface {
     /// Used internally by neli
     pub index: NeliDeviceIndex,

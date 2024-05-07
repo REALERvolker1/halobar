@@ -26,7 +26,7 @@ fn main() -> prelude::R<()> {
     let config = modules::ModulesKnown::default();
 
     // rt.clone().block_on(modules::run(rt, config))?;
-    rt.clone().block_on(modules::net::run())?;
+    // rt.clone().block_on(modules::neli::run())?;
 
     Ok(())
 }
