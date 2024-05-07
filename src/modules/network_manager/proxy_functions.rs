@@ -12,14 +12,15 @@ use crate::prelude::*;
 use zbus::{proxy::CacheProperties, zvariant::OwnedObjectPath};
 
 pub struct NetworkProxies<'c> {
-    pub(super) device_proxy: Option<DeviceProxy<'c>>,
-    pub(super) active_proxy: Option<ActiveProxy<'c>>,
-    pub(super) ap_proxy: Option<AccessPointProxy<'c>>,
+    pub nm_proxy: NetworkManagerProxy<'c>,
+    pub device_proxy: Option<DeviceProxy<'c>>,
+    pub active_proxy: Option<ActiveProxy<'c>>,
+    pub ap_proxy: Option<AccessPointProxy<'c>>,
 }
 impl<'c> NetworkProxies<'c> {
     pub async fn new(
         conn: &'c zbus::Connection,
-        nm_proxy: &'c NetworkManagerProxy<'c>,
+        nm_proxy: NetworkManagerProxy<'c>,
         listener_config: NMPropertyFlags,
         device_name: Option<&str>,
     ) -> NetResult<Self> {
@@ -83,6 +84,7 @@ impl<'c> NetworkProxies<'c> {
         };
 
         Ok(Self {
+            nm_proxy,
             device_proxy: device_proxy_opt,
             active_proxy: active_proxy_opt,
             ap_proxy,
@@ -90,7 +92,7 @@ impl<'c> NetworkProxies<'c> {
     }
 }
 
-async fn access_point<'c>(
+pub(super) async fn access_point<'c>(
     conn: &'c zbus::Connection,
     device_proxy: &DeviceProxy<'c>,
 ) -> NetResult<Option<AccessPointProxy<'c>>> {
@@ -141,7 +143,7 @@ pub async fn device_proxy<'c>(
 
 #[inline]
 #[instrument(level = "trace", skip_all)]
-fn device_proxies<'c>(
+pub(super) fn device_proxies<'c>(
     conn: &'c zbus::Connection,
     devices: Vec<OwnedObjectPath>,
 ) -> FuturesUnordered<impl std::future::Future<Output = zbus::Result<DeviceProxy<'c>>>> {
@@ -152,7 +154,7 @@ fn device_proxies<'c>(
 }
 
 #[instrument(level = "trace", skip(conn))]
-async fn specified_device_proxy<'c>(
+pub(super) async fn specified_device_proxy<'c>(
     conn: &'c zbus::Connection,
     devices: Vec<OwnedObjectPath>,
     device_name: &str,
