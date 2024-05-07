@@ -4,7 +4,7 @@ pub(crate) use color_eyre::{
     eyre::{bail, eyre},
     Report,
 };
-pub(crate) use dyn_fmt::AsStrFormatExt;
+// pub(crate) use dyn_fmt::AsStrFormatExt;
 pub(crate) use futures_util::{stream::FuturesUnordered, StreamExt, TryStreamExt};
 pub(crate) use halobar_config::{
     config_struct,

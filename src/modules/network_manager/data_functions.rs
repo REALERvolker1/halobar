@@ -6,26 +6,30 @@ use self::xmlgen::{
     wireless_device::WirelessProxy,
 };
 use super::*;
-use data_functions::variants::NMDeviceType;
-use zbus::{
-    proxy::CacheProperties,
-    zvariant::{ObjectPath, OwnedObjectPath},
-};
+use variants::{NMConnectivityState, NMDeviceState};
+
+use zbus::{proxy::CacheProperties, zvariant::OwnedObjectPath};
 
 #[derive(Debug)]
 pub(super) struct Speed<'c> {
     pub rx_total: u64,
     pub tx_total: u64,
 
-    pub rx_per_second: Size,
-    pub tx_per_second: Size,
+    pub sender: Arc<mpsc::Sender<NMPropertyType>>,
 
+    pub poll_rate: Duration,
     pub last_checked: Instant,
+
     pub proxy: StatisticsProxy<'c>,
 }
 impl<'c> Speed<'c> {
     #[instrument(level = "debug")]
-    pub async fn new(conn: &'c SystemConnection, device_path: OwnedObjectPath) -> NetResult<Self> {
+    pub async fn new(
+        conn: &'c SystemConnection,
+        device_path: OwnedObjectPath,
+        sender: Arc<mpsc::Sender<NMPropertyType>>,
+        poll_rate: Duration,
+    ) -> NetResult<Self> {
         let proxy = StatisticsProxy::builder(&conn.0)
             .path(device_path)?
             .cache_properties(CacheProperties::No)
@@ -37,8 +41,8 @@ impl<'c> Speed<'c> {
         Ok(Self {
             rx_total: rx_total.0,
             tx_total: tx_total.0,
-            rx_per_second: Size::from_const(0),
-            tx_per_second: Size::from_const(0),
+            sender,
+            poll_rate,
             last_checked: Instant::now(),
             proxy,
         })
@@ -56,22 +60,46 @@ impl<'c> Speed<'c> {
                     let diff = self.[<$type _total>] - [<$type _bytes>].0;
                     let bytes_per_second = diff as f64 / time_interval_seconds;
 
-                    Size::from_bytes(bytes_per_second)
+                    bytes_per_second.round().abs() as u64
                 }}
             };
         }
 
-        self.rx_per_second = diff!(rx);
-        self.tx_per_second = diff!(tx);
+        try_join!(
+            self.sender.send(NMPropertyType::DownSpeed(diff!(rx))),
+            self.sender.send(NMPropertyType::UpSpeed(diff!(tx)))
+        )?;
+
         self.tx_total = tx_bytes.0;
         self.rx_total = rx_bytes.0;
         self.last_checked = checked_at;
 
         Ok(())
     }
+    pub async fn run(mut self, kill_receiver: Arc<flume::Receiver<()>>) -> NetResult<()> {
+        loop {
+            select! {
+                recv = kill_receiver.recv_async() => {
+                    return recv.map_err(|e| {
+                        error!("Failed to receive kill value from sender: {e}");
+                        e.into()
+                    });
+                }
+                Err(e) = self.run_update() => {
+                    error!("Error running the update function: {e}");
+                    return Err(e);
+                }
+            }
+        }
+    }
+    #[inline]
+    async fn run_update(&mut self) -> NetResult<()> {
+        let (_, res) = join!(tokio::time::sleep(self.poll_rate), self.refresh());
+        res
+    }
 }
 
-pub(super) struct NetworkProxies<'c> {
+pub struct NetworkProxies<'c> {
     conn: &'c zbus::Connection,
     nm_proxy: NetworkManagerProxy<'c>,
     device_proxy: Option<DeviceProxy<'c>>,
@@ -84,71 +112,91 @@ impl<'c> NetworkProxies<'c> {
         listener_config: NMPropertyFlags,
         device_name: Option<&str>,
     ) -> NetResult<Self> {
+        if !listener_config.is_enabled() {
+            return Err(NetError::NetDisabled);
+        }
+
         let nm_proxy = NetworkManagerProxy::builder(conn)
             .cache_properties(CacheProperties::No)
             .build()
             .await?;
 
-        let (device_proxy, active_proxy) = if listener_config.device_props()
-            | listener_config.active_conn_props()
-            | listener_config.access_point_props()
-        {
-            match device_name {
-                Some(name) => {
-                    let devices = nm_proxy.devices().await?;
-                    let device_proxy = specified_device_proxy(conn, devices, name).await?;
+        let device_proxy_opt;
+        let active_proxy_opt;
 
-                    // only use what we need
-                    let active = if listener_config.active_conn_props() {
-                        let path = device_proxy.active_connection().await?;
-                        Some(active_proxy(conn, path).await?)
-                    } else {
-                        None
-                    };
+        match device_name {
+            Some(name) => {
+                let devices = nm_proxy.devices().await?;
+                let device = specified_device_proxy(conn, devices, name).await?;
 
-                    (Some(device_proxy), active)
-                }
-                None => {
-                    let path = nm_proxy.primary_connection().await?;
-                    let active = active_proxy(conn, path).await?;
-                    let mut device = None;
+                // only use what we need
+                let active = if listener_config.active_conn_props() {
+                    let path = device.active_connection().await?;
+                    Some(active_proxy(conn, path).await?)
+                } else {
+                    None
+                };
+                device_proxy_opt = Some(device);
+                active_proxy_opt = active;
+            }
+            None => {
+                let path = nm_proxy.primary_connection().await?;
+                let active = active_proxy(conn, path).await?;
+                let mut device = None;
 
-                    if listener_config.device_props() {
-                        let active_devices = active.devices().await?;
-                        let mut devices = device_proxies(conn, active_devices);
+                if listener_config.device_props() {
+                    let active_devices = active.devices().await?;
+                    let mut devices = device_proxies(conn, active_devices);
 
-                        while let Some(d) = devices.next().await {
-                            match d {
-                                Ok(proxy) => {
-                                    device.replace(proxy);
-                                    break;
-                                }
-                                Err(e) => error!("Error getting device: {e}"),
+                    while let Some(d) = devices.next().await {
+                        match d {
+                            Ok(proxy) => {
+                                device.replace(proxy);
+                                break;
                             }
+                            Err(e) => error!("Error getting device: {e}"),
                         }
                     }
-
-                    (device, Some(active))
                 }
+
+                device_proxy_opt = device;
+                active_proxy_opt = Some(active);
             }
-        } else {
-            (None, None)
-        };
+        }
 
         let ap_proxy = if listener_config.access_point_props() {
-            let device_path = device_proxy.expect("Device proxy options must be enabled to get access point props! Please report this as a bug!").inner().path();
-
-            todo!();
+            access_point(
+                &conn,
+                &device_proxy_opt
+                    .expect("Device proxy options must be enabled to get access point props!"),
+            )
+            .await?
+        } else {
+            None
         };
 
         todo!();
     }
 }
 
-// #[instrument(level = "trace", skip(conn))]
-// pub async fn wifi_access_point<'c>(conn: &'c zbus::Connection, path: &'c ObjectPath) -> zbus::Result<Option<AccessPointProxy<'c>>> {
-//     let proxy = WirelessProxy::builder(conn)
-// }
+async fn access_point<'c>(
+    conn: &'c zbus::Connection,
+    device_proxy: &DeviceProxy<'c>,
+) -> NetResult<Option<AccessPointProxy<'c>>> {
+    let device_path = device_proxy.inner().path().clone();
+    debug!("Getting access points for device at path '{device_path}'");
+
+    let wireless_proxy = WirelessProxy::builder(conn)
+        .path(OwnedObjectPath::from(device_path))?
+        .cache_properties(CacheProperties::No)
+        .build()
+        .await?;
+
+    let access_point = wireless_proxy.active_access_point().await?;
+    debug!("Active access point at path '{access_point}'");
+
+    todo!();
+}
 
 /// A constructor for an `ActiveProxy`, to have one source of truth
 #[instrument(level = "trace", skip(conn))]

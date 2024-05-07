@@ -159,9 +159,9 @@ flume = { workspace = true }
 size = { workspace = true }
 serde_repr = "0.1.19"
 bitflags = { version = "2.5.0", features = ["std"] }
-dyn-fmt = "0.4.0"
-neli = { version = "0.6.4", features = ["async"] }
-neli-wifi = { version = "0.6.0", features = ["async"] }
+# dyn-fmt = "0.4.0"
+# neli = { version = "0.6.4", features = ["async"] }
+# neli-wifi = { version = "0.6.0", features = ["async"] }
 
 
 # monoio = { version = "0.2.3", features = [

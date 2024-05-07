@@ -111,6 +111,8 @@ pub enum NetError {
     JoinError,
     #[error("Invalid state detected: {0}")]
     InvalidState(&'static str),
+    #[error("Returned early!")]
+    EarlyReturn,
 }
 
 macro_rules! from_send {

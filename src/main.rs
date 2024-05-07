@@ -5,7 +5,6 @@ pub mod modules;
 mod prelude;
 pub mod types;
 
-#[cfg(target_os = "linux")]
 fn main() -> prelude::R<()> {
     color_eyre::install()?;
 
@@ -25,6 +24,7 @@ fn main() -> prelude::R<()> {
 
     let config = modules::ModulesKnown::default();
 
+    rt.clone().block_on(modules::network_manager::live_test())?;
     // rt.clone().block_on(modules::run(rt, config))?;
     // rt.clone().block_on(modules::neli::run())?;
 
