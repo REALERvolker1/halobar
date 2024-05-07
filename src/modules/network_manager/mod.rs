@@ -10,6 +10,7 @@ pub use variants::NMActiveConnectionState;
 
 pub async fn live_test() -> NetResult<()> {
     let conn = super::SystemConnection::new().await?;
+    panic!("g");
 
     let config_flags = NMPropertyFlags {
         up_speed: true,

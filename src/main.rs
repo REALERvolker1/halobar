@@ -1,4 +1,7 @@
 #![allow(async_fn_in_trait)]
+#![deny(ambiguous_glob_imports)]
+#![deny(large_assignments)]
+#![deny(unsafe_code)]
 
 pub mod globals;
 pub mod modules;

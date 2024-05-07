@@ -136,17 +136,17 @@ impl<'c> Listener<'c> {
         } else {
             None
         };
-todo!();
-        let speed = speed_poll_rate.map(|d| Speed::new(conn, device_path, sender, poll_rate))
+        todo!();
+        // let speed = speed_poll_rate.map(|d| Speed::new(conn, device_path, sender, poll_rate))
 
-        let me = Self {
-            nm_proxy,
-            device_proxy: device_proxy_opt,
-            active_proxy: active_proxy_opt,
-            ap_proxy,
-            kill_receiver,
-            property_sender,
-        };
+        // let me = Self {
+        //     nm_proxy,
+        //     device_proxy: device_proxy_opt,
+        //     active_proxy: active_proxy_opt,
+        //     ap_proxy,
+        //     kill_receiver,
+        //     property_sender,
+        // };
 
         // macro_rules! listener_inner {
         //     ($( $proxy:expr => $( $prop:tt: $prop_type:ident ),+ );+) => {
@@ -166,6 +166,7 @@ todo!();
         // }
 
         // let inner = listener_inner![active_proxy => state: ActiveConnectionState; access_point_proxy => ssid: Ssid, strength: Strength];
-        Ok(me)
+
+        // Ok(me)
     }
 }
