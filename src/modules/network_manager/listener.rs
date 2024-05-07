@@ -1,11 +1,13 @@
-use self::xmlgen::{
+use super::props::*;
+use super::proxy_functions::NetworkProxies;
+use super::xmlgen::{
     access_point::AccessPointProxy,
     active_connection::ActiveProxy,
     device::{DeviceProxy, StatisticsProxy},
     network_manager::NetworkManagerProxy,
 };
-use super::*;
-use zbus::{proxy::CacheProperties, zvariant::OwnedObjectPath};
+use crate::prelude::*;
+use zbus::CacheProperties;
 
 pub(super) struct NetModule<'c> {
     pub device_name: Option<Arc<String>>,
@@ -43,11 +45,8 @@ impl<'c> NetModule<'c> {
 }
 
 pub(super) struct Listener<'c> {
-    pub connection: &'c zbus::Connection,
-    pub nm_proxy: NetworkManagerProxy<'c>,
-    device_proxy: Option<DeviceProxy<'c>>,
-    active_proxy: Option<ActiveProxy<'c>>,
-    access_point_proxy: Option<AccessPointProxy<'c>>,
+    nm_proxy: &'c NetworkManagerProxy<'c>,
+    proxies: NetworkProxies<'c>,
 
     pub kill_receiver: Arc<flume::Receiver<()>>,
     property_sender: Arc<mpsc::Sender<NMPropertyType>>,
@@ -60,19 +59,20 @@ impl<'c> Listener<'c> {
         property_sender: Arc<mpsc::Sender<NMPropertyType>>,
         config: NMPropertyFlags,
         device_name: Option<&str>,
-    ) -> NetResult<()> {
+        nm_proxy: &'c NetworkManagerProxy<'c>,
+    ) -> NetResult<Self> {
         if !kill_receiver.is_empty() {
             return Err(NetError::InvalidState(
                 "New listener created while kill channel has a value!",
             ));
         }
 
-        let nm_proxy = NetworkManagerProxy::builder(conn)
-            .cache_properties(CacheProperties::No)
-            .build()
-            .await?;
-
-        // let device_proxy = if config.iface_name | config.state {}
+        let mut me = Self {
+            nm_proxy,
+            proxies: NetworkProxies::new(conn, nm_proxy, config, device_name).await?,
+            kill_receiver,
+            property_sender,
+        };
 
         macro_rules! listener_inner {
             ($( $proxy:expr => $( $prop:tt: $prop_type:ident ),+ );+) => {
@@ -92,7 +92,6 @@ impl<'c> Listener<'c> {
         }
 
         // let inner = listener_inner![active_proxy => state: ActiveConnectionState; access_point_proxy => ssid: Ssid, strength: Strength];
-
-        todo!();
+        Ok(me)
     }
 }

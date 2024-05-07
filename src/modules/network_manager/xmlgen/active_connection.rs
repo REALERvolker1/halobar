@@ -1,4 +1,5 @@
-use super::*;
+use super::super::variants::*;
+use zbus::proxy;
 
 /// # D-Bus interface proxy for: `org.freedesktop.NetworkManager.Connection.Active`
 ///
@@ -21,7 +22,6 @@ use super::*;
 ///
 /// [Writing a client proxy]: https://dbus2.github.io/zbus/client.html
 /// [D-Bus standard interfaces]: https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces,
-use zbus::proxy;
 #[proxy(
     interface = "org.freedesktop.NetworkManager.Connection.Active",
     default_service = "org.freedesktop.NetworkManager",

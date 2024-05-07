@@ -1,6 +1,7 @@
-use super::{
-    variants::{NM80211Mode, NMActiveConnectionState, NMState},
-    *,
+use super::variants::{NM80211Mode, NMActiveConnectionState, NMState};
+use crate::prelude::{
+    config_struct, data_flags, mpsc, Arc, Deserialize, Deserialize_repr, FmtSegmentVec, Serialize,
+    Serialize_repr,
 };
 
 #[derive(Debug, strum_macros::Display, Serialize, Deserialize, strum_macros::EnumDiscriminants)]

@@ -34,3 +34,4 @@ pub(crate) use tokio::{
 };
 pub(crate) use tracing::{debug, error, info, instrument, trace, warn};
 pub(crate) use zbus::{names as zbus_names, zvariant};
+pub(crate) use zvariant::OwnedObjectPath;

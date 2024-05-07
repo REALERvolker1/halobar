@@ -2,7 +2,7 @@
 //!
 //! TODO: The enums with values of 0x.... are supposed to be merged sort of like drwxr--r-- signs on folders
 
-use super::*;
+use crate::prelude::{zvariant, Deserialize, Serialize, Deserialize_repr, Serialize_repr};
 
 macro_rules! owned_repr {
     ($ty:ty) => {
