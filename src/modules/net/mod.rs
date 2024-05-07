@@ -1,5 +1,7 @@
 use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
+use neli_wifi::{Bss, Station};
+
 use super::*;
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -80,24 +82,154 @@ impl From<u8> for Operstate {
 
 pub type NeliDeviceIndex = i32;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, derive_more::Display)]
+#[display(fmt = "{}. {}: {}", device_index, name, ssid)]
 pub struct WifiInterface {
     /// Used internally by neli
-    pub device_index: NeliDeviceIndex,
+    pub index: NeliDeviceIndex,
     pub ssid: String,
     pub name: String,
     pub power: u32,
+    // pub rx_packets: u64,
+    // pub tx_packets: u64,
 }
 impl WifiInterface {
-    pub fn from_neli_wifi(interface: neli_wifi::Interface) -> Option<Self> {
-        Some(Self {
-            device_index: interface.index?,
-            ssid: denullify(interface.ssid?)?,
-            name: denullify(interface.name?)?,
-            power: interface.power?,
-        })
+    pub fn from_neli_wifi(interface: neli_wifi::Interface) -> NetResult<Self> {
+        let me = Self {
+            index: interface
+                .index
+                .ok_or_else(|| NetError::MissingProperty("index"))?,
+            ssid: denullify(
+                interface
+                    .ssid
+                    .ok_or_else(|| NetError::MissingProperty("ssid"))?,
+            )
+            .unwrap_or_default(),
+            name: denullify(
+                interface
+                    .name
+                    .ok_or_else(|| NetError::MissingProperty("name"))?,
+            )
+            .unwrap_or_default(),
+            power: interface
+                .power
+                .ok_or_else(|| NetError::MissingProperty("power"))?,
+        };
+
+        Ok(me)
+    }
+    #[instrument(level = "trace", skip(socket))]
+    async fn from_name(socket: &mut neli_wifi::AsyncSocket, device_name: &str) -> NetResult<Self> {
+        let mut matching_interfaces = socket
+            .get_interfaces_info()
+            .await?
+            .into_iter()
+            .filter_map(|mut iface| {
+                // I need to replace with an empty vec or I will trigger a missing property error
+                let name = iface.name.replace(Vec::new())?;
+                let name = denullify(name)?;
+
+                if name == device_name {
+                    return Some(Self::from_neli_wifi(iface));
+                }
+
+                None
+            })
+            .filter_map(|iface| {
+                match iface {
+                    Ok(i) => return Some(i),
+                    Err(e) => warn!("Interface error: {e}"),
+                }
+
+                None
+            });
+
+        // I only check for one because there should only be one matching interface.
+        let Some(interface) = matching_interfaces.next() else {
+            return Err(NetError::InvalidIface(device_name.to_owned()));
+        };
+
+        // This allows it to just ignore duplicates instead of failing outright, while telling you it did so
+        while let Some(iface) = matching_interfaces.next() {
+            warn!("Duplicate interface: {}", iface);
+        }
+
+        Ok(interface)
+    }
+    async fn from_index(
+        socket: &mut neli_wifi::AsyncSocket,
+        index: NeliDeviceIndex,
+    ) -> NetResult<Self> {
+        let mut matching_iface =
+            socket
+                .get_interfaces_info()
+                .await?
+                .into_iter()
+                .filter_map(|iface| {
+                    let idx = iface.index?;
+                    if idx == index {
+                        return Some(iface);
+                    }
+
+                    None
+                });
+
+        let matching = match matching_iface.next() {
+            Some(i) => i,
+            None => return Err(NetError::InvalidIndex(Some(index))),
+        };
+
+        let device = Self::from_neli_wifi(matching)?;
+
+        Ok(device)
     }
 }
+
+// #[derive(Debug, Default)]
+// pub struct WifiInterface {
+//     interface: WifiInterfaceMinimal,
+//     stations: Vec<Station>,
+//     bss: Vec<Bss>,
+// }
+// impl WifiInterface {
+//     pub async fn query(socket: &mut neli_wifi::AsyncSocket) -> NetResult<Vec<Self>> {
+//         let interfaces = socket
+//             .get_interfaces_info()
+//             .await?
+//             .into_iter()
+//             .filter_map(WifiInterfaceMinimal::from_neli_wifi);
+
+//         // it all requires a &mut borrow so I can't join these futures ughhhh
+//         let mut out = Vec::new();
+
+//         for interface in interfaces {
+//             debug!("Getting neli device information");
+//             let stations = match socket.get_station_info(interface.device_index).await {
+//                 Ok(s) => s,
+//                 Err(e) => {
+//                     warn!("Failed getting wifi stations: {e}");
+//                     continue;
+//                 }
+//             };
+
+//             let bss = match socket.get_bss_info(interface.device_index).await {
+//                 Ok(b) => b,
+//                 Err(e) => {
+//                     warn!("Failed to get wifi BSS info: {e}");
+//                     continue;
+//                 }
+//             };
+
+//             out.push(WifiInterface {
+//                 interface,
+//                 stations,
+//                 bss,
+//             })
+//         }
+
+//         Ok(out)
+//     }
+// }
 
 /// A function to fix strings because I was getting nullbytes at the end of some of them
 fn denullify(mut bytes: Vec<u8>) -> Option<String> {
@@ -106,21 +238,21 @@ fn denullify(mut bytes: Vec<u8>) -> Option<String> {
         bytes.push(last_byte);
     }
 
-    OsString::from_vec(bytes).into_string().ok()
+    Some(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 pub async fn run() -> R<()> {
     let mut sock = neli_wifi::AsyncSocket::connect()?;
-    let interfaces = sock
-        .get_interfaces_info()
-        .await?
-        .into_iter()
-        .filter_map(WifiInterface::from_neli_wifi);
+    let interfaces = WifiInterface::query(&mut sock).await?;
 
     for iface in interfaces {
-        let info = sock.get_station_info(iface.device_index).await?;
+        let bss = iface.bss.first().unwrap().clone();
+        let station = iface.stations.first().unwrap().clone();
+
+        let info = station.rx_bitrate.unwrap();
+
         info!("{:?}", iface);
-        warn!("{:?}", info);
+        info!("{}", info);
     }
 
     Ok(())
@@ -131,8 +263,21 @@ pub async fn run() -> R<()> {
 pub enum NetError {
     #[error("Invalid index: {:?}", 0)]
     InvalidIndex(Option<NeliDeviceIndex>),
+    #[error("Invalid interface: {0}")]
+    InvalidIface(String),
+    #[error("Missing required property: {0}")]
+    MissingProperty(&'static str),
     #[error("{0}")]
-    Neli(#[from] neli::err::WrappedError),
+    Neli(String),
+    #[error("Internal error: {0}")]
+    Internal(&'static str),
 }
+impl From<neli::err::NlError> for NetError {
+    fn from(e: neli::err::NlError) -> Self {
+        Self::Neli(e.to_string())
+    }
+}
+
+pub type NeliResult<T> = Result<T, neli::err::NlError>;
 
 pub type NetResult<T> = std::result::Result<T, NetError>;
