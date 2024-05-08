@@ -82,7 +82,7 @@ impl FormatStr {
     /// Parse this string into [`FmtSegmentVec`]. See [`parse`] for more info
     #[inline(always)]
     pub fn parse(self) -> Result<FmtSegmentVec, FormatStrError> {
-        parse(self.0)
+        parse(self.0.as_str())
     }
     /// Get the internal string as a slice
     #[inline(always)]
@@ -168,6 +168,10 @@ pub struct FmtSegmentVec {
     pub min_length: usize,
 }
 impl FmtSegmentVec {
+    /// Create a new [`FmtSegmentVec`] from a string
+    pub fn new(format_str: &str) -> Result<Self, FormatStrError> {
+        parse(format_str)
+    }
     /// Get the inner Vec of [`Segment`], consuming self
     #[inline]
     pub fn to_vec(self) -> Vec<Segment> {

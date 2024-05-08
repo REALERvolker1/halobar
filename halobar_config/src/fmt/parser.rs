@@ -17,9 +17,7 @@ pub enum ParserState {
 ///
 /// Refer to [`HaloFormatter`] for more information, including format syntax.
 #[tracing::instrument(level = "trace", skip_all)]
-pub fn parse<S: AsRef<str>>(interpolated_string: S) -> Result<FmtSegmentVec, FormatStrError> {
-    let input_str = interpolated_string.as_ref();
-
+pub fn parse(input_str: &str) -> Result<FmtSegmentVec, FormatStrError> {
     let mut segments = Vec::new();
 
     let mut current_literal = String::new();

@@ -52,6 +52,7 @@ impl<'c> NetModule<'c> {
 
         while let Some(state) = state_stream.next().await {
             let new = state.get().await?;
+            info!("{}", new);
         }
 
         Err(NetError::EarlyReturn)
