@@ -9,98 +9,70 @@ use super::xmlgen::{
 };
 use crate::prelude::*;
 
+use zbus::zvariant::ObjectPath;
 use zbus::{proxy::CacheProperties, zvariant::OwnedObjectPath};
 
-pub struct NetworkProxies<'c> {
-    pub nm_proxy: NetworkManagerProxy<'c>,
-    pub device_proxy: Option<DeviceProxy<'c>>,
-    pub active_proxy: Option<ActiveProxy<'c>>,
-    pub ap_proxy: Option<AccessPointProxy<'c>>,
+/// Get the dbus object path of the proxy. Basically a cloning, use this carefully.
+#[inline]
+pub(super) fn proxy_path(proxy: &zbus::Proxy<'_>) -> OwnedObjectPath {
+    proxy.path().to_owned().into()
 }
-impl<'c> NetworkProxies<'c> {
-    pub async fn new(
-        conn: &'c zbus::Connection,
-        nm_proxy: NetworkManagerProxy<'c>,
-        listener_config: NMPropertyFlags,
-        device_name: Option<&str>,
-    ) -> NetResult<Self> {
-        if !listener_config.is_enabled() {
-            return Err(NetError::NetDisabled);
-        }
 
-        let device_proxy_opt;
-        let active_proxy_opt;
+/// Naive autodetection
+pub(super) async fn autodetect_device_name<'c>(
+    conn: &'c zbus::Connection,
+    nm_proxy: &NetworkManagerProxy<'c>,
+) -> NetResult<String> {
+    let mut connections = nm_proxy
+        .devices()
+        .await?
+        .into_iter()
+        .map(|d| async {
+            let proxy = super::proxy_functions::device_proxy(conn, d).await?;
 
-        match device_name {
-            Some(name) => {
-                let devices = nm_proxy.devices().await?;
-                let device = specified_device_proxy(conn, devices, name).await?;
+            let dev_type = proxy.device_type().await?;
 
-                // only use what we need
-                let active = if listener_config.active_conn_props() {
-                    let path = device.active_connection().await?;
-                    Some(active_proxy(conn, path).await?)
-                } else {
-                    None
-                };
-                device_proxy_opt = Some(device);
-                active_proxy_opt = active;
-            }
-            None => {
-                let path = nm_proxy.primary_connection().await?;
-                let active = active_proxy(conn, path).await?;
-                let mut device = None;
-
-                if listener_config.device_props() {
-                    let active_devices = active.devices().await?;
-                    let mut devices = device_proxies(conn, active_devices);
-
-                    while let Some(d) = devices.next().await {
-                        match d {
-                            Ok(proxy) => {
-                                device.replace(proxy);
-                                break;
-                            }
-                            Err(e) => error!("Error getting device: {e}"),
-                        }
-                    }
+            // TODO: Possibly add more types
+            match dev_type {
+                NMDeviceType::Loopback | NMDeviceType::Unknown => {
+                    return Err(NetError::NetDisabled)
                 }
+                _ => {}
+            }
 
-                device_proxy_opt = device;
-                active_proxy_opt = Some(active);
+            // afaik it will err if it does not have an active conn
+            let active_conn = proxy.active_connection().await?;
+
+            let name = proxy.interface().await?;
+
+            debug!("Found active connection at '{active_conn}' for device {name}");
+
+            Ok::<_, NetError>(name)
+        })
+        .collect::<FuturesUnordered<_>>();
+
+    while let Some(maybe_active) = connections.next().await {
+        match maybe_active {
+            // just get the first, this is a naive impl, remember!
+            Ok(a) => return Ok(a),
+            Err(e) => {
+                debug!("{e}");
+                continue;
             }
         }
-
-        let ap_proxy = if listener_config.access_point_props() {
-            access_point(
-                &conn,
-                device_proxy_opt
-                    .as_ref()
-                    .expect("Device proxy options must be enabled to get access point props!"),
-            )
-            .await?
-        } else {
-            None
-        };
-
-        Ok(Self {
-            nm_proxy,
-            device_proxy: device_proxy_opt,
-            active_proxy: active_proxy_opt,
-            ap_proxy,
-        })
     }
+
+    Err(NetError::NetDisabled)
 }
 
 pub(super) async fn access_point<'c>(
     conn: &'c zbus::Connection,
-    device_proxy: &DeviceProxy<'c>,
+    device_path: OwnedObjectPath,
 ) -> NetResult<Option<AccessPointProxy<'c>>> {
-    let device_path = device_proxy.inner().path().clone();
     debug!("Getting access points for device at path '{device_path}'");
 
     let wireless_proxy = WirelessProxy::builder(conn)
-        .path(OwnedObjectPath::from(device_path))?
+        .path(device_path)?
         .cache_properties(CacheProperties::No)
         .build()
         .await?;

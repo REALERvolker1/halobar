@@ -1,5 +1,4 @@
 use super::props::*;
-use super::proxy_functions::NetworkProxies;
 use super::speed::Speed;
 use super::xmlgen::{
     access_point::AccessPointProxy,
@@ -12,23 +11,22 @@ use crate::prelude::*;
 use zbus::CacheProperties;
 
 pub(super) struct NetModule<'c> {
-    pub device_name: Option<Arc<String>>,
     pub config: Arc<NetKnown>,
     pub nm_proxy: NetworkManagerProxy<'c>,
-    // device: Option<DeviceProxy<'c>>,
-    // active: Option<ActiveProxy<'c>>,
+    pub kill_sender: flume::Sender<()>,
+    pub kill_receiver: Arc<flume::Receiver<()>>,
 }
 impl<'c> NetModule<'c> {
     /// Create the active
     #[instrument(level = "debug", skip(conn))]
-    pub async fn new(conn: &'c zbus::Connection, config: NetKnown) -> NetResult<Option<Self>> {
+    pub async fn new(conn: &'c zbus::Connection, mut config: NetKnown) -> NetResult<Self> {
         // if it was killed already, just skip it!
         // TODO: Move into individual device/conn listener
 
         let config_flags = NMPropertyFlags::from_segments(config.format.segments());
 
         if !config_flags.is_enabled() {
-            return Ok(None);
+            return Err(NetError::NetDisabled);
         }
 
         let nm_proxy = NetworkManagerProxy::builder(conn)
@@ -36,19 +34,35 @@ impl<'c> NetModule<'c> {
             .build()
             .await?;
 
-        let device_name = if config.device.is_empty() {
-            None
-        } else {
-            Some(Arc::clone(&config.device))
-        };
+        if config.device.is_empty() {
+            config.device = super::proxy_functions::autodetect_device_name(conn, &nm_proxy).await?;
+        }
 
-        todo!();
+        let (kill_sender, rec) = flume::bounded(1);
+
+        Ok(Self {
+            config: Arc::new(config),
+            nm_proxy,
+            kill_sender,
+            kill_receiver: Arc::new(rec),
+        })
+    }
+    pub async fn run(&mut self) -> NetResult<()> {
+        let mut state_stream = self.nm_proxy.receive_state_changed().await;
+
+        while let Some(state) = state_stream.next().await {
+            let new = state.get().await?;
+        }
+
+        Err(NetError::EarlyReturn)
     }
 }
 
 pub(super) struct Listener<'c> {
+    pub device_path: OwnedObjectPath,
+
     pub nm_proxy: NetworkManagerProxy<'c>,
-    pub device_proxy: Option<DeviceProxy<'c>>,
+    pub device_proxy: DeviceProxy<'c>,
     pub active_proxy: Option<ActiveProxy<'c>>,
     pub ap_proxy: Option<AccessPointProxy<'c>>,
 
@@ -64,7 +78,7 @@ impl<'c> Listener<'c> {
         kill_receiver: Arc<flume::Receiver<()>>,
         property_sender: Arc<mpsc::Sender<NMPropertyType>>,
         config: NMPropertyFlags,
-        device_name: Option<Arc<String>>,
+        device_name: &str,
         speed_poll_rate: Option<Duration>,
     ) -> NetResult<Self> {
         if !config.is_enabled() {
@@ -81,72 +95,43 @@ impl<'c> Listener<'c> {
             .build()
             .await?;
 
-        let device_proxy_opt;
-        let active_proxy_opt;
+        let devices = nm_proxy.devices().await?;
+        let device_proxy =
+            super::proxy_functions::specified_device_proxy(conn, devices, device_name).await?;
 
-        match device_name {
-            Some(name) => {
-                let devices = nm_proxy.devices().await?;
-                let device =
-                    super::proxy_functions::specified_device_proxy(conn, devices, &name).await?;
+        let device_path = super::proxy_functions::proxy_path(device_proxy.inner());
 
-                // only use what we need
-                let active = if config.active_conn_props() {
-                    let path = device.active_connection().await?;
-                    Some(super::proxy_functions::active_proxy(conn, path).await?)
-                } else {
-                    None
-                };
-                device_proxy_opt = Some(device);
-                active_proxy_opt = active;
-            }
-            None => {
-                let path = nm_proxy.primary_connection().await?;
-                let active = super::proxy_functions::active_proxy(conn, path).await?;
-                let mut device = None;
-
-                if config.device_props() {
-                    let active_devices = active.devices().await?;
-                    let mut devices = super::proxy_functions::device_proxies(conn, active_devices);
-
-                    while let Some(d) = devices.next().await {
-                        match d {
-                            Ok(proxy) => {
-                                device.replace(proxy);
-                                break;
-                            }
-                            Err(e) => error!("Error getting device: {e}"),
-                        }
-                    }
-                }
-
-                device_proxy_opt = device;
-                active_proxy_opt = Some(active);
-            }
-        }
-
-        let ap_proxy = if config.access_point_props() {
-            super::proxy_functions::access_point(
-                &conn,
-                device_proxy_opt
-                    .as_ref()
-                    .expect("Device proxy options must be enabled to get access point props!"),
-            )
-            .await?
+        // only use what we need
+        let active_proxy = if config.active_conn_props() {
+            let path = device_proxy.active_connection().await?;
+            Some(super::proxy_functions::active_proxy(conn, path).await?)
         } else {
             None
         };
-        todo!();
-        // let speed = speed_poll_rate.map(|d| Speed::new(conn, device_path, sender, poll_rate))
 
-        // let me = Self {
-        //     nm_proxy,
-        //     device_proxy: device_proxy_opt,
-        //     active_proxy: active_proxy_opt,
-        //     ap_proxy,
-        //     kill_receiver,
-        //     property_sender,
-        // };
+        let ap_proxy = if config.access_point_props() {
+            super::proxy_functions::access_point(&conn, device_path.clone()).await?
+        } else {
+            None
+        };
+
+        let speed = match speed_poll_rate {
+            Some(d) => {
+                Some(Speed::new(conn, device_path.clone(), Arc::clone(&property_sender), d).await?)
+            }
+            None => None,
+        };
+
+        let me = Self {
+            device_path,
+            nm_proxy,
+            device_proxy,
+            active_proxy,
+            ap_proxy,
+            kill_receiver,
+            property_sender,
+            speed,
+        };
 
         // macro_rules! listener_inner {
         //     ($( $proxy:expr => $( $prop:tt: $prop_type:ident ),+ );+) => {
@@ -167,6 +152,6 @@ impl<'c> Listener<'c> {
 
         // let inner = listener_inner![active_proxy => state: ActiveConnectionState; access_point_proxy => ssid: Ssid, strength: Strength];
 
-        // Ok(me)
+        Ok(me)
     }
 }

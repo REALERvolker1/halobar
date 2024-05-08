@@ -19,12 +19,12 @@ pub(super) struct Speed<'c> {
 impl<'c> Speed<'c> {
     #[instrument(level = "debug")]
     pub async fn new(
-        conn: &'c SystemConnection,
+        conn: &'c zbus::Connection,
         device_path: OwnedObjectPath,
         sender: Arc<mpsc::Sender<NMPropertyType>>,
         poll_rate: Duration,
     ) -> NetResult<Self> {
-        let proxy = StatisticsProxy::builder(&conn.0)
+        let proxy = StatisticsProxy::builder(conn)
             .path(device_path)?
             .cache_properties(CacheProperties::No)
             .build()

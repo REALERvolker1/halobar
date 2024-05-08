@@ -52,7 +52,7 @@ impl NMPropertyFlags {
 config_struct! {
     [Net]
     id: u16 = 0,
-    device: Arc<String> = Arc::new(String::new()),
+    device: String = String::new(),
     // format: FormatStr = FormatStr::default(),
     poll_rate_seconds: u64 = 5,
     // TODO: Make a real good default
