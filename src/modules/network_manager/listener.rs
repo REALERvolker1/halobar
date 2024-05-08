@@ -35,6 +35,7 @@ impl<'c> NetModule<'c> {
             .await?;
 
         if config.device.is_empty() {
+            warn!("Got here");
             config.device = super::proxy_functions::autodetect_device_name(conn, &nm_proxy).await?;
         }
 

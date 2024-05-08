@@ -18,7 +18,7 @@ fn main() -> prelude::R<()> {
     halogen::complete::init_log(&mut log_config, NICE_TARGETS);
 
     let uname = nix::sys::utsname::uname()?;
-    prelude::debug!("Running kernel {}", uname.release().to_string_lossy());
+    prelude::info!("Running kernel {}", uname.release().to_string_lossy());
 
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

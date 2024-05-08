@@ -104,6 +104,7 @@ pub fn init_log<const N: usize>(config: &LogConfig, nice_targets: [&str; N]) {
     }
 
     tracing::info!("Logging initialized");
+    tracing::trace!("Receiving trace messages!");
 
     return;
 }
@@ -216,7 +217,7 @@ impl LogLevel {
         match self {
             Self::Disable => LevelFilter::OFF,
             Self::Error => LevelFilter::ERROR,
-            Self::Debug => LevelFilter::TRACE,
+            Self::Debug => LevelFilter::WARN,
             Self::Trace => LevelFilter::TRACE,
             _ => LevelFilter::WARN,
         }

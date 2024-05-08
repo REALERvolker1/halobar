@@ -13,15 +13,11 @@ pub async fn live_test() -> NetResult<()> {
 
     let config = NetKnown::default();
 
-    let config_flags = NMPropertyFlags {
-        up_speed: true,
-        down_speed: true,
-        ssid: true,
-        iface_name: true,
-        strength: true,
-        state: true,
-        mode: true,
-    };
+    let config_flags = NMPropertyFlags::from_segments(config.format.segments());
+
+    let mut module = listener::NetModule::new(&conn.0, config).await?;
+
+    module.run().await?;
 
     Ok(())
 }

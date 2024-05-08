@@ -53,10 +53,9 @@ config_struct! {
     [Net]
     id: u16 = 0,
     device: String = String::new(),
-    // format: FormatStr = FormatStr::default(),
     poll_rate_seconds: u64 = 5,
     // TODO: Make a real good default
-    format: FmtSegmentVec = FmtSegmentVec::default(),
+    format: FmtSegmentVec = FmtSegmentVec::new("{state?$ }{up_speed}/{down_speed} {strength?Strength: $:No strength}").unwrap(),
 }
 
 config_struct! {
