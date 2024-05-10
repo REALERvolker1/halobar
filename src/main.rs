@@ -6,6 +6,7 @@
 pub mod globals;
 pub mod modules;
 mod prelude;
+pub mod runtime;
 pub mod types;
 
 fn main() -> prelude::R<()> {
