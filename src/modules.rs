@@ -1,6 +1,5 @@
 pub mod time;
 use tokio::runtime::Runtime;
-use tracing::Instrument;
 
 use crate::prelude::*;
 
@@ -128,27 +127,6 @@ pub trait BackendModule: Sized + Send {
     ) -> Result<bool, Self::Error>;
 }
 
-/// TODO: Remove
-pub trait BackendModule1: Sized + Send {
-    /// The type of config that the module requires for user customization.
-    type Config;
-    /// The type of input that the module requires to create a new instance.
-    type Input;
-    /// The type of error that the module can return
-    type Error;
-    /// Create a new instance of this module.
-    async fn new(
-        input: Self::Input,
-        config: Self::Config,
-    ) -> Result<(Self, BiChannel<Event, String>), Self::Error>;
-    /// Run this module. Whether this function loops forever, runs once, or is not run at all depends entirely on its module type.
-    async fn run(&mut self) -> Result<(), Self::Error>;
-    /// Listen for events with this module. Whether this function runs at all depends entirely on its module type.
-    async fn receive_event(&self, event: Event) -> Result<(), Self::Error>;
-    // /// Get this module's [`ModuleType`]. Ideally should be inlined.
-    // fn module_type() -> ModuleType;
-}
-
 /// A specific requirement that the module needs to work properly
 #[derive(Debug, strum_macros::EnumDiscriminants, strum_macros::EnumTryAs)]
 #[strum_discriminants(derive(Serialize, Deserialize, strum_macros::Display))]
@@ -168,9 +146,9 @@ impl ModuleRequirement {
 #[derive(strum_macros::EnumDiscriminants)]
 pub enum OutputType {
     /// The module returns a constant through its channel on start, and is not run.
-    OneShot(DisplayOutput),
+    OneShot(ModuleData),
     /// The module runs in a loop, pushing changes through its channel. The run function should never exit.
-    Loop(BiChannel<Event, DisplayOutput>),
+    Loop(BiChannel<Event, ModuleData>),
 }
 
 /// The type of module this is. This should contain every single different type of module.
@@ -197,5 +175,5 @@ pub enum ModuleType {
 
 #[derive(Debug, strum_macros::Display, Serialize, Deserialize)]
 pub enum ModuleData {
-    Time(),
+    Time(String),
 }
