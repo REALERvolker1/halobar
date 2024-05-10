@@ -60,7 +60,7 @@ pub enum ModuleRequirement {
 }
 
 /// The type of module that this is. This determines a lot about how it is run.
-#[derive(strum_macros::EnumDiscriminants)]
+#[derive(strum_macros::EnumDiscriminants, strum_macros::EnumTryAs, derive_more::From)]
 pub enum OutputType {
     /// The module returns a constant through its channel on start, and is not run.
     OneShot(ModuleData),

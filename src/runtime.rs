@@ -4,9 +4,32 @@ use tokio::runtime::Runtime;
 
 #[inline]
 pub async fn run(runtime: Arc<Runtime>, config: ModuleConfig) -> R<()> {
-    let initializer = BackendInitializer::new(runtime, config).await?;
+    let mut initializer = BackendInitializer::new(runtime, config).await?;
 
-    initializer.run().await
+    // Spawn each module on a task -- they start running instantly!
+    let mut handles = initializer.run().await?;
+
+    // Get the yielded data from this function!
+    let modules = initializer.receive_from_channels().await?;
+
+    while let Some(res) = handles.next().await {
+        let (mod_name, module_return) = match res {
+            Ok(r) => r,
+            Err(e) => {
+                error!("Failed to join task: {e}");
+                continue;
+            }
+        };
+
+        match module_return {
+            Ok(true) => debug!("Module {} returned true", mod_name),
+            Ok(false) => warn!("Module {} returned incorrectly!", mod_name),
+            Err(e) => error!("Module {} returned error: {}", mod_name, e),
+        }
+    }
+
+    warn!("Finished backend execution!");
+    Ok(())
 }
 
 const DEFAULT_START_TIMEOUT_SECONDS: u64 = 5;
@@ -25,7 +48,7 @@ struct BackendInitializer {
     runtime: Arc<Runtime>,
     module_id_creator: ModuleIdCreator,
     receiver: mpsc::UnboundedReceiver<ModuleYield>,
-    sender: Arc<mpsc::UnboundedSender<ModuleYield>>,
+    sender: Option<Arc<mpsc::UnboundedSender<ModuleYield>>>,
     /// I need this to be a hashmap because the listeners do not return in an ordered manner.
     expected_modules: AHashMap<ModuleId, ModuleType>,
     config: ModuleConfig,
@@ -43,18 +66,27 @@ impl BackendInitializer {
             runtime,
             module_id_creator: ModuleIdCreator::default(),
             receiver,
-            sender: Arc::new(sender),
+            sender: Some(Arc::new(sender)),
             expected_modules: AHashMap::new(),
             config,
         })
     }
+
+    /// The second component of the runtime. This initializes modules and runs them in tokio tasks.
+    ///
+    /// It returns handles to each module's task.
     #[instrument(level = "trace", skip_all)]
-    pub async fn run(mut self) -> R<()> {
+    pub async fn run(
+        &mut self,
+    ) -> R<FuturesUnordered<tokio::task::JoinHandle<(&'static str, Result<bool, Report>)>>> {
         let handles = FuturesUnordered::new();
+        let sender = self.sender.take().expect(
+            "Runtime functions out of order! Backend initializer is missing its internal sender!",
+        );
 
         macro_rules! init_module {
             ($( [$mod_name:expr] module: $mod_path:ty, input: $input:expr ),+$(,)?) => {$({
-                let yield_sender = Arc::clone(&self.sender);
+                let yield_sender = Arc::clone(&sender);
                 let input = $input;
                 let id = self.module_id_creator.create();
 
@@ -76,17 +108,19 @@ impl BackendInitializer {
             input: self.config.time.clone(),
         }
 
-        // Get the channels, and start listeners from this function!
-        let modules = self.receive_from_channels().await?;
-
-        wait_for_return(handles).await;
-        info!("Finished backend execution!");
-        Ok(())
+        Ok(handles)
     }
+
     /// The third component of initialization.
+    ///
     /// This waits for each module to return a listener for its value, makes sure everything is alright with return types and whatnot,
     /// then returns the raw, yielded data.
     pub async fn receive_from_channels(&mut self) -> R<Vec<ModuleYield>> {
+        #[cfg(debug_assertions)]
+        if self.sender.is_some() {
+            unreachable!("Runtime functions out of order! Backend initializer has not dropped its internal sender!");
+        }
+
         const SECOND: Duration = Duration::from_secs(1);
 
         let timeout = self
@@ -96,10 +130,9 @@ impl BackendInitializer {
 
         // let mut last_recv = Mutex::new(tokio::time::Instant::now());
         let last_recv = Cell::new(tokio::time::Instant::now());
+        let mut results = Vec::new();
 
         let listener_future = async {
-            let mut results = Vec::new();
-
             while let Some(yielded) = self.receiver.recv().await {
                 // we have to refresh the counter or it may close us unexpectedly!
                 last_recv.replace(tokio::time::Instant::now());
@@ -120,7 +153,7 @@ impl BackendInitializer {
                 bail!("Some modules failed to yield!");
             }
 
-            Ok(results)
+            Ok(())
         };
 
         // This will only return if the timeout is hit.
@@ -133,34 +166,49 @@ impl BackendInitializer {
                 let last_recv_seconds = last_recv.get().elapsed().as_secs();
 
                 if last_recv_seconds > timeout {
-                    bail!("Reached timeout!");
+                    return Err::<(), _>(Report::msg("Reached timeout!"));
                 }
                 tokio::time::sleep(SECOND).await;
             }
         };
 
-        let (results, _): (_, ()) = tokio::try_join!(listener_future, timeout_future)?;
+        // This returns when the first one returns
+        select! {
+            timeout = timeout_future => {
+                timeout?;
+            }
+            listened = listener_future => {
+                listened?;
+            }
+        }
 
         Ok(results)
     }
 }
 
-async fn wait_for_return(
-    mut handles: FuturesUnordered<tokio::task::JoinHandle<(&'static str, Result<bool, Report>)>>,
-) {
-    while let Some(res) = handles.next().await {
-        let (mod_name, module_return) = match res {
-            Ok(r) => r,
-            Err(e) => {
-                error!("Failed to join task: {e}");
-                continue;
-            }
-        };
+pub struct Backend {
+    module_data: AHashMap<ModuleId, ModuleYield>,
+}
+impl<'b> Backend {
+    /// Send event data to a specific module.
+    ///
+    /// This returns true if it sent correctly, false if it did not send correctly,
+    /// and an internal error if the message itself is invalid.
+    pub async fn send_event(&'b self, event: Event, module_id: &ModuleId) -> InternalResult<bool> {
+        let module = self
+            .module_data
+            .get(module_id)
+            .ok_or_else(|| InternalError::new("Backend sender", "Failed to send event"))?;
 
-        match module_return {
-            Ok(true) => debug!("Module {} returned true", mod_name),
-            Ok(false) => warn!("Module {} returned incorrectly!", mod_name),
-            Err(e) => error!("Module {} returned error: {}", mod_name, e),
-        }
+        let channel = module.data_output.try_as_loop_ref().ok_or_else(|| {
+            InternalError::new(
+                "Backend sender",
+                "Tried to send event data to a static module!",
+            )
+        })?;
+
+        let sent = channel.send(event).await;
+
+        Ok(sent)
     }
 }
