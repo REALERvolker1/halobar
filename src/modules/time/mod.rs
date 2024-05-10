@@ -3,6 +3,8 @@ use chrono::format::StrftimeItems;
 use super::*;
 
 config_struct! {
+    @known {Clone}
+    @config {Clone}
     [Time]
     format: String = "%I:%M:%S %P".to_owned(),
     // format_alt: String = "%a, %m/%d @ %I:%M:%S %P".to_owned(),
@@ -34,18 +36,19 @@ impl Time {
     }
 }
 impl BackendModule for Time {
-    type Input = TimeKnown;
+    type Input = TimeConfig;
     const MODULE_TYPE: ModuleType = ModuleType::Time;
     async fn run(
         module_id: ModuleId,
         input: Self::Input,
         yield_sender: Arc<mpsc::UnboundedSender<ModuleYield>>,
     ) -> R<bool> {
+        let config = input.into_known();
         let (channel, yielded) = BiChannel::new(15, Some("Time module"), Some("Time receiver"));
 
         let me = Self {
-            format: input.format,
-            interval: Duration::from_millis(input.interval_ms),
+            format: config.format,
+            interval: Duration::from_millis(config.interval_ms),
             channel,
         };
 

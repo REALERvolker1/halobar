@@ -15,11 +15,17 @@ pub use proxy;
 
 /// A module that can be used in the backend to provide data.
 ///
-/// TODO: Every provided config must be of the Config variant, rather than the Known variant, as people might not have wanted the module or something
+/// Multi-instance modules are not supported yet, but modules must always assume that there could
+/// potentially be duplicates -- I don't know if I will ever add support, but I would like to keep the possibility open.
 pub trait BackendModule: Sized + Send {
     /// The type of input that the module requires to create a new instance,
     /// including any type of config that the module requires for user customization.
-    type Input;
+    ///
+    /// This must not have any required fields!!!
+    ///
+    /// This input is cloned before the module is created, so that duplicate modules/bars are not broken.
+    /// The module is responsible for ensuring this is not too expensive.
+    type Input: Clone;
     /// The type of module this is.
     const MODULE_TYPE: ModuleType;
     /// The function that runs this module. Consider this function blocking.
