@@ -48,6 +48,11 @@ impl<'b> Backend {
 
         Ok(sent)
     }
+
+    /// Act as a bridge to the frontend from the backend, multiplexing module data.
+    pub(crate) async fn frontend_bridge(mut self) -> R<()> {
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]

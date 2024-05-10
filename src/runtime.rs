@@ -86,6 +86,7 @@ impl BackendInitializer {
             "Runtime functions out of order! Backend initializer is missing its internal sender!",
         );
 
+        // TODO: Make this a trait that all module configs must impl
         macro_rules! init_module {
             ($( [$mod_name:expr] module: $mod_path:ty, input: $input:expr ),+$(,)?) => {$({
                 let yield_sender = Arc::clone(&sender);
