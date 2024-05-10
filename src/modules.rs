@@ -1,11 +1,11 @@
 pub mod time;
-use tokio::runtime::Runtime;
 
 use crate::prelude::*;
 
 config_struct! {
     [Modules]
     // @conf network: network => Net,
+    @conf time: time => Time,
     start_timeout_seconds: u64 = 5,
 }
 
@@ -33,10 +33,21 @@ pub trait BackendModule: Sized + Send {
     ///
     /// If it was expected to return, it will return `Ok(true)`. A bool value of `false` indicates it was supposed to run forever.
     async fn run(
+        module_id: ModuleId,
         input: Self::Input,
-        yield_sender: Arc<mpsc::UnboundedSender<(OutputType, ModuleType)>>,
+        yield_sender: Arc<mpsc::UnboundedSender<ModuleYield>>,
     ) -> R<bool>;
 }
+
+/// All the data that is yielded from each module's `run()` function.
+///
+/// This is required to tie it to the frontend.
+pub struct ModuleYield {
+    pub id: ModuleId,
+    pub data_output: OutputType,
+    pub module_type: ModuleType,
+}
+impl ModuleYield {}
 
 /// A specific requirement that the module needs to work properly
 #[derive(

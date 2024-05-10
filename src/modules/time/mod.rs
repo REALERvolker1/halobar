@@ -37,8 +37,9 @@ impl BackendModule for Time {
     type Input = TimeKnown;
     const MODULE_TYPE: ModuleType = ModuleType::Time;
     async fn run(
+        module_id: ModuleId,
         input: Self::Input,
-        yield_sender: Arc<mpsc::UnboundedSender<(OutputType, ModuleType)>>,
+        yield_sender: Arc<mpsc::UnboundedSender<ModuleYield>>,
     ) -> R<bool> {
         let (channel, yielded) = BiChannel::new(15, Some("Time module"), Some("Time receiver"));
 
@@ -48,7 +49,13 @@ impl BackendModule for Time {
             channel,
         };
 
-        yield_sender.send((OutputType::Loop(yielded), Self::MODULE_TYPE))?;
+        let yielded = ModuleYield {
+            id: module_id,
+            data_output: OutputType::Loop(yielded),
+            module_type: Self::MODULE_TYPE,
+        };
+
+        yield_sender.send(yielded)?;
 
         me.listen().await;
 
