@@ -1,6 +1,3 @@
-// pub mod network;
-// pub mod neli;
-pub mod network_manager;
 pub mod time;
 use tokio::runtime::Runtime;
 use tracing::Instrument;
@@ -201,5 +198,4 @@ pub enum ModuleType {
 #[derive(Debug, strum_macros::Display, Serialize, Deserialize)]
 pub enum ModuleData {
     Time(),
-    NetworkManager(network_manager::NMPropertyType),
 }
