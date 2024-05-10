@@ -25,10 +25,6 @@ pub trait BackendModule: Sized + Send {
     /// The type of input that the module requires to create a new instance,
     /// including any type of config that the module requires for user customization.
     type Input;
-    /// The type of error that the module can return
-    type Error: Into<Report>;
-    /// Get the requirements for this module to run. This is used to make sure we only initialize what we need.
-    const MODULE_REQUIREMENTS: &'static [ModuleRequirementDiscriminants];
     /// The type of module this is.
     const MODULE_TYPE: ModuleType;
     /// The function that runs this module. Consider this function blocking.
@@ -40,22 +36,16 @@ pub trait BackendModule: Sized + Send {
         runtime: Arc<Runtime>,
         input: Self::Input,
         yield_sender: Arc<mpsc::UnboundedSender<(OutputType, ModuleType)>>,
-    ) -> Result<bool, Self::Error>;
+    ) -> R<bool>;
 }
 
 /// A specific requirement that the module needs to work properly
-#[derive(Debug, strum_macros::EnumDiscriminants, strum_macros::EnumTryAs)]
-#[strum_discriminants(derive(Serialize, Deserialize, strum_macros::Display))]
+#[derive(
+    Debug, PartialEq, Eq, strum_macros::EnumTryAs, Serialize, Deserialize, strum_macros::Display,
+)]
 pub enum ModuleRequirement {
-    SystemDbus(SystemConnection),
-    SessionDbus(SessionConnection),
-}
-impl ModuleRequirement {
-    /// Try to fulfill this
-    #[inline]
-    pub async fn fulfill_system_dbus(&self) -> zbus::Result<SystemConnection> {
-        SystemConnection::new().await
-    }
+    SystemDbus,
+    SessionDbus,
 }
 
 /// The type of module that this is. This determines a lot about how it is run.
@@ -86,7 +76,7 @@ pub enum OutputType {
 #[serde(rename_all = "kebab-case")]
 pub enum ModuleType {
     Time,
-    Network,
+    Custom,
 }
 
 #[derive(Debug, strum_macros::Display, Serialize, Deserialize)]
