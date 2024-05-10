@@ -26,7 +26,7 @@ fn main() -> prelude::R<()> {
         .build()?;
     let rt = prelude::Arc::new(rt);
 
-    let config = modules::ModulesKnown::default();
+    let config = runtime::ModulesKnown::default();
 
     // rt.clone().block_on(modules::run(rt, config))?;
     rt.clone().block_on(runtime::run(rt.clone(), config))?;

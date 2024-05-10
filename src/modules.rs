@@ -2,13 +2,6 @@ pub mod time;
 
 use crate::prelude::*;
 
-config_struct! {
-    [Modules]
-    // @conf network: network => Net,
-    @conf time: time => Time,
-    start_timeout_seconds: u64 = 5,
-}
-
 /// A helper to make dbus proxy modules
 #[macro_export]
 macro_rules! proxy {
@@ -21,6 +14,8 @@ macro_rules! proxy {
 pub use proxy;
 
 /// A module that can be used in the backend to provide data.
+///
+/// TODO: Every provided config must be of the Config variant, rather than the Known variant, as people might not have wanted the module or something
 pub trait BackendModule: Sized + Send {
     /// The type of input that the module requires to create a new instance,
     /// including any type of config that the module requires for user customization.
