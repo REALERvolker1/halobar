@@ -1,8 +1,8 @@
 #![allow(async_fn_in_trait)]
 #![deny(ambiguous_glob_imports)]
 #![deny(large_assignments)]
-#![deny(unsafe_code)]
 
+pub mod backend;
 pub mod globals;
 pub mod modules;
 mod prelude;

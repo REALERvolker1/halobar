@@ -12,6 +12,8 @@ pub async fn run(runtime: Arc<Runtime>, config: ModuleConfig) -> R<()> {
     // Get the yielded data from this function!
     let modules = initializer.receive_from_channels().await?;
 
+    crate::backend::initialize_backend(modules)?;
+
     while let Some(res) = handles.next().await {
         let (mod_name, module_return) = match res {
             Ok(r) => r,
@@ -183,32 +185,5 @@ impl BackendInitializer {
         }
 
         Ok(results)
-    }
-}
-
-pub struct Backend {
-    module_data: AHashMap<ModuleId, ModuleYield>,
-}
-impl<'b> Backend {
-    /// Send event data to a specific module.
-    ///
-    /// This returns true if it sent correctly, false if it did not send correctly,
-    /// and an internal error if the message itself is invalid.
-    pub async fn send_event(&'b self, event: Event, module_id: &ModuleId) -> InternalResult<bool> {
-        let module = self
-            .module_data
-            .get(module_id)
-            .ok_or_else(|| InternalError::new("Backend sender", "Failed to send event"))?;
-
-        let channel = module.data_output.try_as_loop_ref().ok_or_else(|| {
-            InternalError::new(
-                "Backend sender",
-                "Tried to send event data to a static module!",
-            )
-        })?;
-
-        let sent = channel.send(event).await;
-
-        Ok(sent)
     }
 }
