@@ -19,7 +19,7 @@ macro_rules! data_flags {
             ::paste::paste! {
             #[doc = "If any of the fields of " $struct_name "are enabled, this will return true. Useful for determining if we should skip entirely."]
             pub fn is_enabled(&self) -> bool {
-                $( self.$name & )+ true
+                $( self.$name | )+ true
             }
             }
             /// Determine this from what the formatter is configured to show.

@@ -18,7 +18,7 @@ pub(super) struct NetModule<'c> {
 }
 impl<'c> NetModule<'c> {
     /// Create the active
-    #[instrument(level = "debug", skip(conn))]
+    #[instrument(level = "debug", skip_all)]
     pub async fn new(conn: &'c zbus::Connection, mut config: NetKnown) -> NetResult<Self> {
         // if it was killed already, just skip it!
         // TODO: Move into individual device/conn listener
@@ -28,6 +28,7 @@ impl<'c> NetModule<'c> {
         if !config_flags.is_enabled() {
             return Err(NetError::NetDisabled);
         }
+        info!("Config flags: {config_flags:?}");
 
         let nm_proxy = NetworkManagerProxy::builder(conn)
             .cache_properties(CacheProperties::No)
@@ -53,10 +54,10 @@ impl<'c> NetModule<'c> {
 
         while let Some(state) = state_stream.next().await {
             let new = state.get().await?;
-            info!("{}", new);
+            info!("{:?}", new);
         }
 
-        Err(NetError::EarlyReturn)
+        panic!("Returned early!");
     }
 }
 

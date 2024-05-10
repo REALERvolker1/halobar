@@ -13,11 +13,10 @@ pub async fn live_test() -> NetResult<()> {
 
     let config = NetKnown::default();
 
-    let config_flags = NMPropertyFlags::from_segments(config.format.segments());
-
     let mut module = listener::NetModule::new(&conn.0, config).await?;
 
     module.run().await?;
 
+    crate::prelude::debug!("Quitting");
     Ok(())
 }

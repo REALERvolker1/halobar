@@ -56,7 +56,7 @@ pub(super) async fn autodetect_device_name<'c>(
             // just get the first, this is a naive impl, remember!
             Ok(a) => return Ok(a),
             Err(e) => {
-                debug!("{e}");
+                warn!("{e}");
                 continue;
             }
         }
