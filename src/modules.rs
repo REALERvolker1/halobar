@@ -33,7 +33,6 @@ pub trait BackendModule: Sized + Send {
     ///
     /// If it was expected to return, it will return `Ok(true)`. A bool value of `false` indicates it was supposed to run forever.
     async fn run(
-        runtime: Arc<Runtime>,
         input: Self::Input,
         yield_sender: Arc<mpsc::UnboundedSender<(OutputType, ModuleType)>>,
     ) -> R<bool>;

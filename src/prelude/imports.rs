@@ -19,6 +19,7 @@ pub(crate) use size::Size;
 pub(crate) use smart_default::SmartDefault;
 pub(crate) use std::{
     cell::{Cell, RefCell},
+    convert::Infallible,
     env, fs, io,
     path::{Path, PathBuf},
     rc::Rc,
