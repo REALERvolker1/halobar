@@ -1,7 +1,7 @@
 pub use crate::types::*;
 pub(crate) use ahash::{AHashMap, AHashSet};
 pub(crate) use color_eyre::{
-    eyre::{bail, eyre},
+    eyre::{bail, eyre, OptionExt},
     Report,
 };
 // pub(crate) use dyn_fmt::AsStrFormatExt;

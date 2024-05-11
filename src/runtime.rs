@@ -48,7 +48,6 @@ pub struct ModuleConfig {
 
 struct BackendInitializer {
     runtime: Arc<Runtime>,
-    module_id_creator: ModuleIdCreator,
     receiver: mpsc::UnboundedReceiver<ModuleYield>,
     sender: Option<Arc<mpsc::UnboundedSender<ModuleYield>>>,
     /// I need this to be a hashmap because the listeners do not return in an ordered manner.
@@ -66,7 +65,6 @@ impl BackendInitializer {
 
         Ok(Self {
             runtime,
-            module_id_creator: ModuleIdCreator::default(),
             receiver,
             sender: Some(Arc::new(sender)),
             expected_modules: AHashMap::new(),
@@ -91,10 +89,10 @@ impl BackendInitializer {
             ($( [$mod_name:expr] module: $mod_path:ty, input: $input:expr ),+$(,)?) => {$({
                 let yield_sender = Arc::clone(&sender);
                 let input = $input;
-                let id = self.module_id_creator.create();
+                let id = ModuleId::try_new().expect(::const_format::concatcp!("Failed to create a module ID for module", stringify!($mod_name)));
 
                 trace!("Initializing module {}:{}", $mod_name, id);
-                self.expected_modules.insert(id, <$mod_path>::MODULE_TYPE);
+                self.expected_modules.insert(id.clone(), <$mod_path>::MODULE_TYPE);
 
                 let handle = self.runtime.spawn(async move {
                     let module_return = <$mod_path>::run(id, input, yield_sender).await;

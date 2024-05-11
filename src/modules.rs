@@ -83,7 +83,7 @@ pub enum OutputType {
     /// The module returns a constant through its channel on start, and is not run.
     OneShot(ModuleData),
     /// The module runs in a loop, pushing changes through its channel. The run function should never exit.
-    Loop(BiChannel<Event, ModuleData>),
+    Loop(BiChannel<EventData, ModuleData>),
 }
 
 /// The type of module this is. This should contain every single different type of module.

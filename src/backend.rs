@@ -9,44 +9,36 @@ use crate::prelude::*;
 //     BACKEND.get().ok_or(BackendError::Uninit)
 // }
 
-// /// Initialize the public backend, for use in initialization. This should only be called once!
-// pub(super) fn initialize_backend(data: Vec<ModuleYield>) -> BackendResult<()> {
-//     let me = Backend {
-//         module_data: data
-//             .into_iter()
-//             .map(|d| (d.id, d))
-//             .collect::<AHashMap<_, _>>(),
-//     };
-
-//     BACKEND
-//         .set(me)
-//         .map_err(|_| BackendError::DoubleInitialization)?;
-
-//     Ok(())
-// }
-
 pub(super) struct Backend {
     /// The type of each module, the index of the module data in the map is the id of the corresponding module.
-    modules: AHashMap<ModuleId, ModuleYield>,
-    frontend_channel: mpsc::Sender<ModuleData>,
+    modules: Vec<Option<ModuleYield>>,
+    channel: BiChannel<ModuleData, EventData>,
 }
 impl Backend {
     #[instrument(level = "trace", skip(self))]
-    pub fn get_module_by_id<'d>(&'d self, id: &'d ModuleId) -> Option<&'d ModuleYield> {
-        let data = self.modules.get(id);
-        debug_assert!(data.is_some());
-
-        data
+    pub fn get_module_by_id<'d>(&'d self, id: ModuleIdInteger) -> BackendResult<&'d ModuleYield> {
+        match self.modules.get(id as usize) {
+            Some(Some(m)) => Ok(m),
+            Some(None) => Err(BackendError::DeadModule(id)),
+            None => Err(BackendError::InvalidId(id)),
+        }
     }
 
     /// This function is only used once in initialization!
+    #[instrument(level = "debug", skip_all)]
     pub fn new(
         mut yielded_modules: Vec<ModuleYield>,
-        frontend_channel: mpsc::Sender<ModuleData>,
-    ) -> R<()> {
-        // I might as well implement sorting myself, as I would have had to ensure each module
-        // was at the correct index anyways
-        let mut modules = Vec::with_capacity(yielded_modules.len());
+    ) -> R<(Arc<Self>, BiChannel<EventData, ModuleData>)> {
+        // I might as well implement sorting myself,
+        // because I would have had to ensure each module was at the correct index anyways
+
+        let max_id = yielded_modules
+            .iter()
+            .map(|m| m.id.get())
+            .max()
+            .ok_or_eyre("No backend modules provided!")?;
+
+        let mut modules = (0..=max_id).map(|_| None).collect::<Vec<_>>();
 
         while let Some(module) = yielded_modules.pop() {
             let index = module.id.get_usize();
@@ -54,7 +46,47 @@ impl Backend {
             modules[index] = Some(module);
         }
 
-        todo!();
+        let (channel, frontend) = BiChannel::new(32, Some("MUX receiver"), Some("MUX sender"));
+
+        Ok((Arc::new(Self { modules, channel }), frontend))
+    }
+
+    pub(super) async fn run_listener(mut self) -> R<()> {
+        // let receiving_future = async {
+        //     while let Some(event) = self.channel.receiver.recv().await {
+        //         let module = match self.get_module_by_id(event.module.get()) {
+        //             Ok(m) => m,
+        //             Err(e) => {
+        //                 warn!("Error getting module: {e}");
+        //                 continue;
+        //             }
+        //         };
+
+        //         let channel = module
+        //             .data_output
+        //             .try_as_loop_ref()
+        //             .ok_or_else(|| BackendError::SendStaticModule)?;
+
+        //         channel.send(event).await;
+        //     }
+
+        //     Ok::<(), Report>(())
+        // };
+
+        let sending_future = async {
+            let active_channels = self
+                .modules
+                .iter()
+                .filter_map(|m| m.as_ref())
+                .filter_map(|m| m.data_output.try_as_loop_ref());
+
+
+            // self.channel.sender
+
+            Ok::<(), Report>(())
+        };
+
+        Ok(())
     }
 }
 
@@ -62,10 +94,10 @@ impl Backend {
 pub enum BackendError {
     #[error("Not initialized")]
     Uninit,
-    #[error("Double initialization!")]
-    DoubleInitialization,
     #[error("Invalid ID: {0}")]
-    InvalidId(ModuleId),
+    InvalidId(ModuleIdInteger),
+    #[error("Dead module ID: {0}")]
+    DeadModule(ModuleIdInteger),
     #[error("Tried to send event data to a static module!")]
     SendStaticModule,
 }

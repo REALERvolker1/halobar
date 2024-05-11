@@ -15,7 +15,7 @@ pub struct Time {
     format: String,
     // format_alt: String,
     interval: Duration,
-    channel: BiChannel<ModuleData, Event>,
+    channel: BiChannel<ModuleData, EventData>,
     // state: Mutex<FormatState>,
 }
 impl Time {
