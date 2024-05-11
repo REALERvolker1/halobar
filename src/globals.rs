@@ -1,8 +1,6 @@
 use once_cell::sync::OnceCell;
 use zbus::Connection;
 
-pub use crate::backend::get_backend;
-
 macro_rules! zbus_conn {
     ($( $kind:tt ),+) => {
         paste::paste! {$(

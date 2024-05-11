@@ -1,56 +1,62 @@
 use crate::modules::{self, ModuleData, ModuleType, ModuleYield};
 use crate::prelude::*;
 
-static BACKEND: OnceCell<Backend> = OnceCell::new();
+// static BACKEND: OnceCell<Backend> = OnceCell::new();
 
-/// Get a reference to the backend information
-#[inline]
-pub fn get_backend() -> BackendResult<&'static Backend> {
-    BACKEND.get().ok_or(BackendError::Uninit)
+// /// Get a reference to the backend information
+// #[inline]
+// pub fn get_backend() -> BackendResult<&'static Backend> {
+//     BACKEND.get().ok_or(BackendError::Uninit)
+// }
+
+// /// Initialize the public backend, for use in initialization. This should only be called once!
+// pub(super) fn initialize_backend(data: Vec<ModuleYield>) -> BackendResult<()> {
+//     let me = Backend {
+//         module_data: data
+//             .into_iter()
+//             .map(|d| (d.id, d))
+//             .collect::<AHashMap<_, _>>(),
+//     };
+
+//     BACKEND
+//         .set(me)
+//         .map_err(|_| BackendError::DoubleInitialization)?;
+
+//     Ok(())
+// }
+
+pub(super) struct Backend {
+    /// The type of each module, the index of the module data in the map is the id of the corresponding module.
+    modules: AHashMap<ModuleId, ModuleYield>,
+    frontend_channel: mpsc::Sender<ModuleData>,
 }
+impl Backend {
+    #[instrument(level = "trace", skip(self))]
+    pub fn get_module_by_id<'d>(&'d self, id: &'d ModuleId) -> Option<&'d ModuleYield> {
+        let data = self.modules.get(id);
+        debug_assert!(data.is_some());
 
-/// Initialize the public backend, for use in initialization. This should only be called once!
-pub(super) fn initialize_backend(data: Vec<ModuleYield>) -> BackendResult<()> {
-    let me = Backend {
-        module_data: data
-            .into_iter()
-            .map(|d| (d.id, d))
-            .collect::<AHashMap<_, _>>(),
-    };
+        data
+    }
 
-    BACKEND
-        .set(me)
-        .map_err(|_| BackendError::DoubleInitialization)?;
+    /// This function is only used once in initialization!
+    pub fn new(
+        mut yielded_modules: Vec<ModuleYield>,
+        frontend_channel: mpsc::Sender<ModuleData>,
+    ) -> R<()> {
+        // I might as well implement sorting myself, as I would have had to ensure each module
+        // was at the correct index anyways
+        let mut modules = Vec::with_capacity(yielded_modules.len());
 
-    Ok(())
-}
+        while let Some(module) = yielded_modules.pop() {
+            
+        }
 
-pub struct Backend {
-    module_data: AHashMap<ModuleId, ModuleYield>,
-}
-impl<'b> Backend {
-    /// Send event data to a specific module.
-    ///
-    /// This returns true if it sent correctly, false if it did not send correctly,
-    /// and an internal error if the message itself is invalid.
-    pub async fn send_event(&'b self, event: Event, module_id: &ModuleId) -> BackendResult<bool> {
-        let module = self
-            .module_data
-            .get(module_id)
-            .ok_or_else(|| BackendError::InvalidId(*module_id))?;
-
-        let channel = module
-            .data_output
-            .try_as_loop_ref()
-            .ok_or_else(|| BackendError::SendStaticModule)?;
-
-        let sent = channel.send(event).await;
-
-        Ok(sent)
+        todo!();
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum BackendError {
     #[error("Not initialized")]
     Uninit,

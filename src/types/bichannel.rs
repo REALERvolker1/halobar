@@ -3,6 +3,7 @@ use crate::prelude::{error, mpsc, Arc};
 /// A two-way mpmc channel.
 ///
 /// TODO: Document more
+#[derive(Debug)]
 pub struct BiChannel<T, F> {
     pub context: String,
     pub sender: Arc<mpsc::Sender<T>>,

@@ -1,6 +1,7 @@
 pub mod time;
 
 use crate::prelude::*;
+use std::cmp::Ordering;
 
 /// A helper to make dbus proxy modules
 #[macro_export]
@@ -60,7 +61,12 @@ pub struct ModuleYield {
     pub data_output: OutputType,
     pub module_type: ModuleType,
 }
-impl ModuleYield {}
+impl ModuleYield {
+    /// Compare two yields to each other. Used in the initializer functions
+    pub fn id_ordering(&self, other: &Self) -> Ordering {
+        self.id.cmp(&other.id)
+    }
+}
 
 /// A specific requirement that the module needs to work properly
 #[derive(
