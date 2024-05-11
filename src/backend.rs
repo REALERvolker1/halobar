@@ -49,8 +49,8 @@ impl<'b> Backend {
         Ok(sent)
     }
 
-    /// Act as a bridge to the frontend from the backend, multiplexing module data.
-    pub(crate) async fn frontend_bridge(mut self) -> R<()> {
+    /// View all messages passed to and from the backend and the frontend. Do not let this function fall into the wrong hands!
+    pub(crate) async fn subscribe(&self) -> R<()> {
         Ok(())
     }
 }
