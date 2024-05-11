@@ -1,4 +1,4 @@
-use crate::modules::{self, ModuleYield};
+use crate::modules::{self, ModuleData, ModuleType, ModuleYield};
 use crate::prelude::*;
 
 static BACKEND: OnceCell<Backend> = OnceCell::new();
@@ -47,11 +47,6 @@ impl<'b> Backend {
         let sent = channel.send(event).await;
 
         Ok(sent)
-    }
-
-    /// View all messages passed to and from the backend and the frontend. Do not let this function fall into the wrong hands!
-    pub(crate) async fn subscribe(&self) -> R<()> {
-        Ok(())
     }
 }
 

@@ -30,7 +30,7 @@ impl Time {
         loop {
             join!(
                 tokio::time::sleep(self.interval),
-                self.channel.send(ModuleData::Time(self.tick()))
+                self.channel.send(Self::module_data(self.tick()))
             );
         }
     }

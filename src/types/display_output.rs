@@ -2,13 +2,11 @@ use std::sync::atomic::{AtomicU8, Ordering};
 
 use crate::prelude::{error, Arc, Deserialize, Serialize};
 
-/// Content that can be printed by the frontend.
-///
-/// To use this, impl `Into<DisplayOutput>` for `T`.
+/// Content that can be sent to the frontend.
 ///
 /// TODO: Finalize stuff required.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DisplayOutput {
+pub struct ModuleData {
     pub inner: String,
 }
 

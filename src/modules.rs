@@ -26,8 +26,10 @@ pub trait BackendModule: Sized + Send {
     /// This input is cloned before the module is created, so that duplicate modules/bars are not broken.
     /// The module is responsible for ensuring this is not too expensive.
     type Input: Clone;
+
     /// The type of module this is.
     const MODULE_TYPE: ModuleType;
+
     /// The function that runs this module. Consider this function blocking.
     ///
     /// Important: If it is a oneshot with no events, please specify! If it has to receive events, make it a loop.
@@ -38,6 +40,16 @@ pub trait BackendModule: Sized + Send {
         input: Self::Input,
         yield_sender: Arc<mpsc::UnboundedSender<ModuleYield>>,
     ) -> R<bool>;
+
+    /// Create module data with this backend module's type.
+    ///
+    /// This is a shortcut meant to make stuff easier.
+    fn module_data(data: String) -> ModuleData {
+        ModuleData {
+            format: data,
+            module_type: Self::MODULE_TYPE,
+        }
+    }
 }
 
 /// All the data that is yielded from each module's `run()` function.
@@ -90,7 +102,21 @@ pub enum ModuleType {
     Custom,
 }
 
-#[derive(Debug, strum_macros::Display, Serialize, Deserialize)]
-pub enum ModuleData {
-    Time(String),
+/// Content that can be sent to the frontend.
+///
+/// TODO: Finalize stuff required.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModuleData {
+    pub format: String,
+    pub module_type: ModuleType,
+}
+impl ModuleData {
+    /// Create module data
+    #[inline]
+    pub const fn new(module_type: ModuleType, format: String) -> Self {
+        Self {
+            format,
+            module_type,
+        }
+    }
 }
