@@ -4,7 +4,7 @@ use tokio::runtime::Runtime;
 
 #[inline]
 pub async fn run(runtime: Arc<Runtime>, config: ModuleConfig) -> R<()> {
-    let mut initializer = BackendInitializer::new(runtime, config).await?;
+    let mut initializer = BackendInitializer::new(runtime.clone(), config).await?;
 
     // Spawn each module on a task -- they start running instantly!
     let mut handles = initializer.run().await?;
@@ -12,7 +12,11 @@ pub async fn run(runtime: Arc<Runtime>, config: ModuleConfig) -> R<()> {
     // Get the yielded data from this function!
     let modules = initializer.receive_from_channels().await?;
 
-    crate::backend::initialize_backend(modules)?;
+    // TODO: Connect to frontend
+    let frontend_channel = crate::backend::Backend::init(modules)?;
+
+    let _eavesdrop_handle =
+        runtime.spawn(async move { crate::backend::get_backend()?.eavesdrop().await });
 
     while let Some(res) = handles.next().await {
         let (mod_name, module_return) = match res {
@@ -145,6 +149,10 @@ impl BackendInitializer {
                 }
 
                 results.push(yielded);
+
+                if self.expected_modules.is_empty() {
+                    break;
+                }
             }
 
             if !self.expected_modules.is_empty() {

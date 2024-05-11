@@ -45,9 +45,9 @@ pub trait BackendModule: Sized + Send {
     /// Create module data with this backend module's type.
     ///
     /// This is a shortcut meant to make stuff easier.
-    fn module_data(data: String) -> ModuleData {
+    fn module_data(content: String) -> ModuleData {
         ModuleData {
-            format: data,
+            content,
             module_type: Self::MODULE_TYPE,
         }
     }
@@ -111,17 +111,18 @@ pub enum ModuleType {
 /// Content that can be sent to the frontend.
 ///
 /// TODO: Finalize stuff required.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_more::Display)]
+#[display(fmt = "{}", content)]
 pub struct ModuleData {
-    pub format: String,
+    pub content: String,
     pub module_type: ModuleType,
 }
 impl ModuleData {
     /// Create module data
     #[inline]
-    pub const fn new(module_type: ModuleType, format: String) -> Self {
+    pub const fn new(module_type: ModuleType, content: String) -> Self {
         Self {
-            format,
+            content,
             module_type,
         }
     }
