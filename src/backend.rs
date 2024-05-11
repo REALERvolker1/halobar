@@ -49,7 +49,9 @@ impl Backend {
         let mut modules = Vec::with_capacity(yielded_modules.len());
 
         while let Some(module) = yielded_modules.pop() {
-            
+            let index = module.id.get_usize();
+
+            modules[index] = Some(module);
         }
 
         todo!();
