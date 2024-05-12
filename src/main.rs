@@ -3,6 +3,7 @@
 #![deny(large_assignments)]
 
 // pub mod backend;
+pub mod client;
 pub mod globals;
 pub mod modules;
 mod prelude;
