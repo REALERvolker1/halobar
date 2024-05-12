@@ -7,6 +7,7 @@ pub mod globals;
 pub mod modules;
 mod prelude;
 pub mod runtime;
+pub mod to_frontend;
 pub mod types;
 
 fn main() -> prelude::R<()> {
