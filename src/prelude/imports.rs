@@ -10,7 +10,7 @@ pub(crate) use halobar_config::{
     config_struct,
     fmt::{FmtSegmentVec, FmtSegments, FnTable, FormatStr, HaloFormatter},
 };
-pub(crate) use halogen::{Event, Message};
+pub(crate) use halogen::{Event, Variant};
 pub(crate) use nix::errno::Errno;
 pub(crate) use once_cell::sync::{Lazy, OnceCell};
 pub(crate) use serde::{Deserialize, Serialize};

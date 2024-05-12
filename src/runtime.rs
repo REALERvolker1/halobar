@@ -13,10 +13,10 @@ pub async fn run(runtime: Arc<Runtime>, config: ModuleConfig) -> R<()> {
     let modules = initializer.receive_from_channels().await?;
 
     // TODO: Connect to frontend
-    let frontend_channel = crate::backend::Backend::init(modules)?;
+    // let frontend_channel = crate::backend::Backend::init(modules)?;
 
-    let _eavesdrop_handle =
-        runtime.spawn(async move { crate::backend::get_backend()?.eavesdrop().await });
+    // let _eavesdrop_handle =
+    //     runtime.spawn(async move { crate::backend::get_backend()?.eavesdrop().await });
 
     while let Some(res) = handles.next().await {
         let (mod_name, module_return) = match res {

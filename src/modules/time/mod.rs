@@ -19,18 +19,20 @@ pub struct Time {
     // state: Mutex<FormatState>,
 }
 impl Time {
-    fn tick(&self) -> String {
+    fn tick(&self) -> ModuleData {
         let items = StrftimeItems::new(&self.format);
 
         let time = chrono::Local::now();
 
-        return time.format_with_items(items).to_string();
+        let formatted_time = time.format_with_items(items).to_string();
+
+        Self::module_data(Variant::String(formatted_time))
     }
     async fn listen(self) -> ! {
         loop {
             join!(
                 tokio::time::sleep(self.interval),
-                self.channel.send(Self::module_data(self.tick()))
+                self.channel.send(self.tick())
             );
         }
     }

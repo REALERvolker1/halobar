@@ -1,13 +1,14 @@
 //! Various functions that are an abstraction over what the frontend will eventually be like.
 
+use crate::modules::ModuleData;
 use crate::prelude::*;
 
 pub type FrontendSender<T> = Arc<mpsc::UnboundedSender<T>>;
 
 /// A sender/receiver that makes sure messages go to the proper places.
 pub struct FrontendMux {
-    pub message_sender: FrontendSender<Message>,
-    message_receiver: mpsc::UnboundedReceiver<Message>,
+    pub message_sender: FrontendSender<ModuleData>,
+    message_receiver: mpsc::UnboundedReceiver<ModuleData>,
     event_sender: FrontendSender<Event>,
     event_receiver: mpsc::UnboundedReceiver<Event>,
 }

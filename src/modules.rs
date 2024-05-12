@@ -45,7 +45,7 @@ pub trait BackendModule: Sized + Send {
     /// Create module data with this backend module's type.
     ///
     /// This is a shortcut meant to make stuff easier.
-    fn module_data(content: String) -> ModuleData {
+    fn module_data(content: Variant) -> ModuleData {
         ModuleData {
             content,
             module_type: Self::MODULE_TYPE,
@@ -58,7 +58,8 @@ pub trait BackendModule: Sized + Send {
 /// This is required to tie it to the frontend.
 pub struct ModuleYield {
     pub id: ModuleId,
-    pub data_output: OutputType,
+    pub initial_data: ModuleData,
+    pub subscription: Option<mpsc::UnboundedReceiver<ModuleData>>,
     pub module_type: ModuleType,
 }
 impl ModuleYield {
@@ -75,15 +76,6 @@ impl ModuleYield {
 pub enum ModuleRequirement {
     SystemDbus,
     SessionDbus,
-}
-
-/// The type of module that this is. This determines a lot about how it is run.
-#[derive(strum_macros::EnumDiscriminants, strum_macros::EnumTryAs, derive_more::From)]
-pub enum OutputType {
-    /// The module returns a constant through its channel on start, and is not run.
-    OneShot(ModuleData),
-    /// The module runs in a loop, pushing changes through its channel. The run function should never exit.
-    Loop(BiChannel<EventData, ModuleData>),
 }
 
 /// The type of module this is. This should contain every single different type of module.
@@ -111,18 +103,17 @@ pub enum ModuleType {
 /// Content that can be sent to the frontend.
 ///
 /// TODO: Finalize stuff required.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_more::Display)]
-#[display(fmt = "{}", content)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ModuleData {
-    pub content: String,
+    pub content: Variant,
     pub module_type: ModuleType,
 }
 impl ModuleData {
     /// Create module data
     #[inline]
-    pub const fn new(module_type: ModuleType, content: String) -> Self {
+    pub fn new<V: Into<Variant>>(module_type: ModuleType, content: V) -> Self {
         Self {
-            content,
+            content: content.into(),
             module_type,
         }
     }
