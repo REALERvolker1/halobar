@@ -18,7 +18,7 @@ pub struct Backend {
 }
 impl Backend {
     #[instrument(level = "trace", skip(self))]
-    pub fn get_module_by_id<'d>(&'d self, id: ModuleId) -> BackendResult<&'d ModuleYield> {
+    pub fn get_module_by_id<'d>(&'d self, id: ModuleIdInteger) -> BackendResult<&'d ModuleYield> {
         match self.modules.get(id as usize) {
             Some(Some(m)) => Ok(m),
             Some(None) => Err(BackendError::DeadModule(id)),
@@ -48,7 +48,7 @@ impl Backend {
         // I might as well implement sorting myself,
         // because I would have had to ensure each module was at the correct index anyways
         while let Some(module) = yielded_modules.pop() {
-            let index = module.id.get_usize();
+            let index = module.id.get() as usize;
 
             modules[index] = Some(module);
         }

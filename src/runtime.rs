@@ -88,12 +88,15 @@ impl BackendInitializer {
             "Runtime functions out of order! Backend initializer is missing its internal sender!",
         );
 
+        let mut module_id_creator = ModuleIdFactory::new();
+
         // TODO: Make this a trait that all module configs must impl
         macro_rules! init_module {
             ($( [$mod_name:expr] module: $mod_path:ty, input: $input:expr ),+$(,)?) => {$({
                 let yield_sender = Arc::clone(&sender);
                 let input = $input;
-                let id = ModuleId::try_new().expect(::const_format::concatcp!("Failed to create a module ID for module", stringify!($mod_name)));
+                const ERR_EXPECT: &str = ::const_format::concatcp!("Failed to create a module ID for module", stringify!($mod_name));
+                let id = module_id_creator.generate().expect(ERR_EXPECT);
 
                 trace!("Initializing module {}:{}", $mod_name, id);
                 self.expected_modules.insert(id.clone(), <$mod_path>::MODULE_TYPE);

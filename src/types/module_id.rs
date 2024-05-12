@@ -1,7 +1,7 @@
 use crate::prelude::{debug, instrument, warn};
 
 /// The raw integer type that the [`ModuleId`] contains
-type ModuleIdInteger = u8;
+pub type ModuleIdInteger = u8;
 
 /// The raw integer type that I am using for frontend module IDs.
 #[derive(
