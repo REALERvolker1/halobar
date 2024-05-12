@@ -1,98 +1,53 @@
-use std::sync::atomic::Ordering;
-
-use crate::prelude::{instrument, trace, warn, Arc};
+use crate::prelude::{debug, instrument, warn};
 
 /// The raw integer type that the [`ModuleId`] contains
-pub type ModuleIdInteger = u8;
-/// The atomic version of [`ModuleIdInteger`]
-type AtomicModuleIdInteger = std::sync::atomic::AtomicU8;
+type ModuleIdInteger = u8;
 
-static MODULE_ID_GEN: AtomicModuleIdInteger = AtomicModuleIdInteger::new(0);
+/// The raw integer type that I am using for frontend module IDs.
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, derive_more::Display, derive_more::AsRef,
+)]
+pub struct ModuleId(ModuleIdInteger);
+impl ModuleId {
+    /// Get the inner integer
+    pub fn get(&self) -> ModuleIdInteger {
+        self.0
+    }
+}
 
-#[instrument(level = "trace")]
-fn generate_new_module_id() -> Option<ModuleIdInteger> {
-    let generated = MODULE_ID_GEN
-        .fetch_update(Ordering::Release, Ordering::Acquire, |current| {
-            if current == ModuleIdInteger::MAX {
-                return None;
-            }
-
-            let new = current + 1;
-            Some(new)
-        })
-        .ok();
-
-    match generated {
-        Some(new) => trace!("Generated new module ID: {new}"),
-        None => warn!(
+/// An error that occured when generating a module ID
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, thiserror::Error)]
+pub struct ModuleIdError;
+impl std::fmt::Display for ModuleIdError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        const FORMAT: &str = const_format::formatcp!(
             "Failed to generate new module ID, you have more than {}!",
             ModuleIdInteger::MAX
-        ),
+        );
+        FORMAT.fmt(f)
     }
-
-    generated
 }
 
-/// The type that I use for the module ID. It contains an Arc, so it is relatively cheap to clone.
+/// A generator that creates new [`ModuleId`]s.
 ///
-/// Several methods on this struct are unsafe -- not because they use unsafe rust,
-/// but because using them could easily result in undefined behavior.
-///
-/// I am intentionally making this hard to use, because it is an essential part of the internal
-/// message passing API and if you misuse it, you must be punished severely.
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, derive_more::Display)]
-pub struct ModuleId {
-    inner: Arc<ModuleIdInteger>,
+/// # THIS MUST ONLY BE USED IN INITIALIZATION
+pub struct ModuleIdFactory {
+    inner: u8,
 }
-impl ModuleId {
-    /// Create a new ModuleId. Very expensive synchronization, please do not run this in
-    /// code that isn't initialization-related.
-    pub fn try_new() -> Option<Self> {
-        let integer = generate_new_module_id()?;
-        // safety: We generated the inner value using the single intended method
-        Some(unsafe { Self::new_unchecked(integer) })
+impl ModuleIdFactory {
+    pub const fn new() -> Self {
+        Self { inner: 0 }
     }
-
-    /// Create a new ModuleId directly from the raw integer,
-    /// without verifying it is not already taken by another module
+    /// Generate a new unique module ID.
     ///
-    /// Safety: This technically uses no unsafe code internally,
-    /// but the entire concept itself is inherently unsafe.
-    pub unsafe fn new_unchecked(id: ModuleIdInteger) -> Self {
-        Self {
-            inner: Arc::new(id),
+    /// If the module ID is over the maximum of the underlying type,
+    /// this will return an error.
+    pub fn generate(&mut self) -> Result<ModuleId, ModuleIdError> {
+        if self.inner == ModuleIdInteger::MAX {
+            return Err(ModuleIdError);
         }
-    }
 
-    /// Get the inner ID
-    pub fn get(&self) -> ModuleIdInteger {
-        *self.inner
-    }
-
-    /// Get this type as a usize, suitable for indexing operations
-    pub fn get_usize(&self) -> usize {
-        usize::from(self.get())
-    }
-
-    /// Set this module's ID to an integer without checking if it is out of bounds or not.
-    ///
-    /// Safety: This technically uses no unsafe code internally,
-    /// but the entire concept itself is inherently unsafe.
-    pub unsafe fn set_unchecked(&mut self, value: ModuleIdInteger) -> ModuleIdInteger {
-        let old = self.get();
-        let new = ModuleId::new_unchecked(value);
-        *self = new;
-
-        old
-    }
-}
-impl AsRef<ModuleIdInteger> for ModuleId {
-    fn as_ref(&self) -> &ModuleIdInteger {
-        &self.inner
-    }
-}
-impl std::fmt::Debug for ModuleId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("ModuleId").field(&self.get()).finish()
+        self.inner += 1;
+        Ok(ModuleId(self.inner))
     }
 }

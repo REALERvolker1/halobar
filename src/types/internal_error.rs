@@ -15,4 +15,4 @@ impl InternalError {
     }
 }
 
-pub type InternalResult<T> = std::result::Result<T, InternalError>;
+pub type InternalResult<T> = core::result::Result<T, InternalError>;

@@ -11,5 +11,5 @@ pub(crate) use config_flags::data_flags;
 pub use event::EventData;
 pub use format_state::FormatState;
 pub use internal_error::{InternalError, InternalResult};
-pub use module_id::{ModuleId, ModuleIdInteger};
+pub use module_id::{ModuleId, ModuleIdFactory};
 pub use zbus_connection::{SessionConnection, SystemConnection};

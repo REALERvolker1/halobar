@@ -18,7 +18,7 @@ pub struct Backend {
 }
 impl Backend {
     #[instrument(level = "trace", skip(self))]
-    pub fn get_module_by_id<'d>(&'d self, id: ModuleIdInteger) -> BackendResult<&'d ModuleYield> {
+    pub fn get_module_by_id<'d>(&'d self, id: ModuleId) -> BackendResult<&'d ModuleYield> {
         match self.modules.get(id as usize) {
             Some(Some(m)) => Ok(m),
             Some(None) => Err(BackendError::DeadModule(id)),
