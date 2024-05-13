@@ -1,4 +1,5 @@
 pub mod time;
+pub mod upower;
 
 use crate::{
     client::{DataRequest, ProviderError, Request},
