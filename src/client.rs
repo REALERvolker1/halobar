@@ -4,10 +4,26 @@ use crate::{
 };
 
 /// The different states for a request
+#[derive(Debug, Clone)]
 pub enum Request {
     Request(RequestField),
     Fulfilled(ModuleData),
     Error(ProviderError),
+}
+impl Request {
+    pub fn resolve(&mut self, data: ModuleData) {
+        *self = Self::Fulfilled(data)
+    }
+    pub fn reject(&mut self, error: ProviderError) {
+        *self = Self::Error(error)
+    }
+    /// Return this as an error with [`ProviderError::InvalidRequest`].
+    ///
+    /// Clones and boxes the request internally.
+    pub fn reject_invalid(&mut self) {
+        let boxed_req = Box::new(self.clone());
+        *self = Request::Error(ProviderError::InvalidRequest(boxed_req))
+    }
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -18,6 +34,8 @@ pub enum ProviderError {
     QueryError,
     #[error("Invalid data type")]
     InvalidType,
+    #[error("Invalid request: {0:?}")]
+    InvalidRequest(Box<Request>),
 }
 /// A request for some data from a backend data provider module.
 ///
@@ -25,5 +43,5 @@ pub enum ProviderError {
 #[derive(Debug, Clone)]
 pub struct DataRequest {
     pub id: ModuleId,
-    pub data_fields: AHashMap<String, Option<ModuleData>>,
+    pub data_fields: Vec<Request>,
 }

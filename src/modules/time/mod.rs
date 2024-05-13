@@ -84,16 +84,21 @@ impl ModuleDataProvider for Time {
 
         let time = Self::get_time();
 
-        for request in requests.iter_mut() {
-            for (strf, initial) in request.data_fields.iter_mut() {
-                let stime = Strftime(strf.clone());
+        for data_request in requests.iter_mut() {
+            for request in data_request.data_fields.iter_mut() {
+                match request {
+                    Request::Request(RequestField::Time(strf)) => {
+                        let stime = Strftime(strf.clone());
 
-                initial.replace(ModuleData {
-                    specific_target: Some(request.id.clone()),
-                    content: Data::Time(TimeData(stime.format_time(&time))),
-                });
+                        request.resolve(ModuleData {
+                            specific_target: Some(data_request.id.clone()),
+                            content: Data::Time(TimeData(stime.format_time(&time))),
+                        });
 
-                me.format_strings.insert(request.id.clone(), stime);
+                        me.format_strings.insert(data_request.id.clone(), stime);
+                    }
+                    _ => request.reject_invalid(),
+                }
             }
         }
 
