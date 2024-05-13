@@ -8,7 +8,7 @@ use futures_util::future::BoxFuture;
 use types::*;
 use xmlgen::{display_device::DeviceProxy, keyboard::KbdBacklightProxy, upower::UPowerProxy};
 use zbus::{
-    proxy::{CacheProperties, PropertyChanged, PropertyStream},
+    proxy::{CacheProperties, PropertyChanged},
     Connection,
 };
 
@@ -21,7 +21,6 @@ config_struct! {
 
 #[derive(Debug)]
 struct Keyboard<'c> {
-    conn: &'c Connection,
     keyboard: KbdBacklightProxy<'c>,
     max_brightness: i32,
 }
@@ -35,7 +34,6 @@ impl<'c> Keyboard<'c> {
         let max_brightness = keyboard.get_max_brightness().await?;
 
         Ok(Self {
-            conn,
             keyboard,
             max_brightness,
         })
@@ -210,36 +208,6 @@ impl<'c> Upower<'c> {
             None => request.reject(ProviderError::QueryError),
         }
 
-        // {
-        //     let mut empty_stream = self.device.receive_time_to_empty_changed().await;
-        //     let mut full_stream = self.device.receive_time_to_full_changed().await;
-        //     Box::new(async move {
-
-        //     loop {
-        //         let new_time = select! {
-        //             Some(empty) = empty_stream.next() => {
-        //                 if self.on_battery() {
-        //                     continue;
-        //                 }
-
-        //                 empty.get().await?
-        //             }
-
-        //             Some(full) = full_stream.next() => {
-        //                 if !self.on_battery() {
-        //                     continue;
-        //                 }
-
-        //                 full.get().await?
-        //             }
-        //         };
-
-        //         channel.send(ModuleData::new(Data::Upower(UpowerData::Time(Duration::from_secs(new_time.unsigned_abs())))))?;
-
-        //     }
-        //     // Ok::<(), Report>(())
-        // })},
-
         Ok(())
     }
 }
@@ -281,7 +249,7 @@ impl ModuleDataProvider for UpowerMod {
             }
         }
 
-        let (channel, subscription) = BiChannel::<ModuleData, Event>::new(16);
+        let (channel, yield_subscription) = BiChannel::<ModuleData, Event>::new(16);
 
         // I need to loop over all the requested types one more time because
         // I could not return futures referencing self in upower.fulfill_initial_request()
@@ -416,19 +384,39 @@ impl ModuleDataProvider for UpowerMod {
             })),
         });
 
+        let subscription = if prop_futures.is_empty() {
+            None
+        } else {
+            Some(yield_subscription)
+        };
+
         yield_channel.send(ModuleYield {
-            subscription: Some(subscription),
+            subscription,
             fulfilled_requests: requests,
         })?;
 
-        while let Some(prop_stream) = prop_futures.next().await {
-            error!("A upower property stream stopped responding!");
-            if let Err(e) = prop_stream {
-                error!("{e}");
-            }
+        if prop_futures.is_empty() {
+            return Ok(());
         }
 
-        Ok(())
+        prop_futures.push(Box::pin(async {
+            let mut battery_sub = upower.upower.receive_on_battery_changed().await;
+
+            while let Some(b) = battery_sub.next().await {
+                let on_battery = b.get().await?;
+                set_on_battery(on_battery);
+            }
+            Ok(())
+        }));
+
+        while let Some(returned) = prop_futures.next().await {
+            match returned {
+                Ok(()) => warn!("A upower property stream stopped responding!"),
+                Err(e) => warn!("Error occured in upower stream: {e}"),
+            };
+        }
+
+        Err(Report::msg("All upower subscriptions stopped responding!"))
     }
 }
 
