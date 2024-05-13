@@ -19,6 +19,7 @@
 //!
 //! [Writing a client proxy]: https://dbus2.github.io/zbus/client.html
 //! [D-Bus standard interfaces]: https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces,
+use crate::modules::upower::CriticalAction;
 use zbus::proxy;
 #[proxy(
     interface = "org.freedesktop.UPower",
@@ -31,7 +32,7 @@ trait UPower {
     fn enumerate_devices(&self) -> zbus::Result<Vec<zbus::zvariant::OwnedObjectPath>>;
 
     /// When the system's power supply is critical (critically low batteries or UPS), the system will take this action.
-    fn get_critical_action(&self) -> zbus::Result<String>;
+    fn get_critical_action(&self) -> zbus::Result<CriticalAction>;
 
     /// Get the object to the "display device", a composite device that represents the status icon to show in desktop environments.
     /// You can also access the object directly as its path is guaranteed to be `/org/freedesktop/UPower/devices/DisplayDevice`.

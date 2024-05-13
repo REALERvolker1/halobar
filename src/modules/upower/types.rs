@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use super::*;
 
 macro_rules! zvariant {
@@ -166,6 +168,46 @@ impl TryFrom<::zbus::zvariant::OwnedValue> for CriticalAction {
 
         let me = Self::from_str(&value_string).unwrap_or_default();
         Ok(me)
+    }
+}
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, derive_more::AsRef,
+)]
+pub struct Percentage(u8);
+impl Percentage {
+    pub fn get(&self) -> u8 {
+        self.0
+    }
+    /// Tries to make a new percentage. Returns the input as an error if the int was invalid.
+    pub fn try_new(input: u8) -> Result<Self, u8> {
+        if input > 100 {
+            return Err(input);
+        }
+
+        Ok(Self(input))
+    }
+}
+impl TryFrom<::zbus::zvariant::OwnedValue> for Percentage {
+    type Error = ::zbus::zvariant::Error;
+    fn try_from(value: ::zbus::zvariant::OwnedValue) -> Result<Self, Self::Error> {
+        let tried = match value.deref() {
+            Value::I32(i) => Self::try_new(i.unsigned_abs() as u8),
+            Value::I16(i) => Self::try_new(i.unsigned_abs() as u8),
+            Value::I64(i) => Self::try_new(i.unsigned_abs() as u8),
+            Value::U8(i) => Self::try_new(*i),
+            Value::U16(i) => Self::try_new(*i as u8),
+            Value::U32(i) => Self::try_new(*i as u8),
+            Value::U64(i) => Self::try_new(*i as u8),
+
+            Value::F64(f) => Self::try_new(f.round() as u8),
+            _ => Err(0),
+        };
+
+        tried.map_err(|_| {
+            trace!("Failed to convert value {value:?} to Percentage");
+            zvariant::Error::IncorrectType
+        })
     }
 }
 

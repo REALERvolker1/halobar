@@ -91,13 +91,13 @@ macro_rules! data_enum {
 
         /// The data a module can provide. This is an enum, with a branch for each
         /// data provider, and an inner tuple where the data is carried.
-        #[derive(Debug, Clone, PartialEq)]
+        #[derive(Debug, Clone, PartialEq, derive_more::From)]
         pub enum Data {
             $( $module($( $data_type ),+) ),+
         }
 
         /// These are the fields that you can request. This is sent to the providers.
-        #[derive(Debug, Clone, PartialEq)]
+        #[derive(Debug, Clone, PartialEq, derive_more::From)]
         pub enum RequestField {
             $( $module($req_field_type) ),+
         }

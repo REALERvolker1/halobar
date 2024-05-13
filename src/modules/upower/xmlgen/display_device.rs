@@ -1,6 +1,6 @@
 use zbus::proxy;
 
-use crate::modules::upower::types::{BatteryState, DeviceType, WarningLevel};
+use crate::modules::upower::types::{BatteryState, DeviceType, Percentage, WarningLevel};
 
 /// # D-Bus interface proxy for: `org.freedesktop.UPower.Device`
 ///
@@ -38,7 +38,7 @@ trait Device {
 
     /// the amount of energy left on the device.
     #[zbus(property)]
-    fn percentage(&self) -> zbus::Result<f64>;
+    fn percentage(&self) -> zbus::Result<Percentage>;
 
     /// the power state of the display device, such as Charging or Discharging.
     #[zbus(property)]
