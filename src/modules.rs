@@ -5,18 +5,6 @@ use crate::{
     prelude::*,
     to_frontend::FrontendSender,
 };
-use std::cmp::Ordering;
-
-/// A helper to make dbus proxy modules
-#[macro_export]
-macro_rules! proxy {
-    ($conn:expr, $proxy:ty) => {
-        <$proxy>::builder($conn)
-            .cache_properties(::zbus::proxy::CacheProperties::No)
-            .build()
-    };
-}
-pub use proxy;
 
 /// A module that can be used in the backend to provide data.
 pub trait ModuleDataProvider: Sized + Send {
@@ -37,7 +25,7 @@ pub trait ModuleDataProvider: Sized + Send {
     async fn main(
         config: Self::ServerConfig,
         requests: Vec<DataRequest>,
-        yield_channel: oneshot::Sender<ModuleYield>,
+        yield_channel: mpsc::UnboundedSender<ModuleYield>,
     ) -> R<()>;
 }
 
@@ -71,10 +59,10 @@ pub struct ModuleData {
 impl ModuleData {
     /// Create module data
     #[inline]
-    pub fn new(content: Data) -> Self {
+    pub const fn new(content: Data) -> Self {
         Self {
             specific_target: None,
-            content: content,
+            content,
         }
     }
 }

@@ -70,7 +70,7 @@ impl ModuleDataProvider for Time {
     async fn main(
         config: Self::ServerConfig,
         mut requests: Vec<DataRequest>,
-        yield_channel: oneshot::Sender<ModuleYield>,
+        yield_channel: mpsc::UnboundedSender<ModuleYield>,
     ) -> R<()> {
         let my_config = config.into_known();
 
@@ -102,9 +102,7 @@ impl ModuleDataProvider for Time {
             fulfilled_requests: requests,
         };
 
-        yield_channel
-            .send(yields)
-            .map_err(|_| Report::msg("Failed to yield data!"))?;
+        yield_channel.send(yields)?;
 
         loop {
             join!(tokio::time::sleep(me.interval), me.tick());

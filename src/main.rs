@@ -7,7 +7,7 @@ pub mod client;
 pub mod globals;
 pub mod modules;
 mod prelude;
-pub mod runtime;
+// pub mod runtime;
 pub mod to_frontend;
 pub mod types;
 
@@ -28,10 +28,10 @@ fn main() -> prelude::R<()> {
         .build()?;
     let rt = prelude::Arc::new(rt);
 
-    let config = runtime::ModuleConfig::default();
+    // let config = runtime::ModuleConfig::default();
 
     // rt.clone().block_on(modules::run(rt, config))?;
-    rt.clone().block_on(runtime::run(rt.clone(), config))?;
+    // rt.clone().block_on(runtime::run(rt.clone(), config))?;
 
     Ok(())
 }
