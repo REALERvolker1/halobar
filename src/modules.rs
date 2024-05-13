@@ -1,10 +1,10 @@
+pub mod command;
 pub mod time;
 pub mod upower;
 
 use crate::{
     client::{DataRequest, ProviderError, Request},
     prelude::*,
-    to_frontend::FrontendSender,
 };
 
 /// A module that can be used in the backend to provide data.
