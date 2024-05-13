@@ -246,10 +246,7 @@ impl<'c> Upower<'c> {
 
 /// This is literally just here so I can have the Upower struct just reference
 /// the connection so I don't have to mess with self-referential structs
-pub struct UpowerMod {
-    conn: Connection,
-    channel: BiChannel<ModuleData, Event>,
-}
+pub struct UpowerMod;
 impl ModuleDataProvider for UpowerMod {
     type ServerConfig = UpowerConfig;
     async fn main(
@@ -263,24 +260,28 @@ impl ModuleDataProvider for UpowerMod {
 
         let upower = Upower::new(&conn, my_config.device_path).await?;
 
-        for mut data_request in requests.into_iter() {
-            let mut requests = data_request
-                .data_fields
-                .iter_mut()
-                .map(|req| upower.fulfill_initial_request(req))
+        for data_request in requests.iter_mut() {
+            let mut pending_requests = Vec::with_capacity(data_request.data_fields.len());
+            std::mem::swap(&mut pending_requests, &mut data_request.data_fields);
+
+            let mut requests = pending_requests
+                .into_iter()
+                .map(|req| async {
+                    let mut req = req;
+                    if let Err(e) = upower.fulfill_initial_request(&mut req).await {
+                        warn!("Error fulfilling initial request for {req:?}: {e}");
+                        req.reject(ProviderError::QueryError);
+                    }
+                    req
+                })
                 .collect::<FuturesUnordered<_>>();
 
-            while let Some(result) = requests.next().await {
-                result?;
+            while let Some(request) = requests.next().await {
+                data_request.data_fields.push(request);
             }
         }
 
-        let (channel, yield_receiver) = BiChannel::new(16);
-
-        let me = Self {
-            conn: conn.clone(),
-            channel,
-        };
+        let (channel, subscription) = BiChannel::<ModuleData, Event>::new(16);
 
         // I need to loop over all the requested types one more time because
         // I could not return futures referencing self in upower.fulfill_initial_request()
@@ -307,7 +308,7 @@ impl ModuleDataProvider for UpowerMod {
 
                     while let Some(p) = stream.next().await {
                         let prop = p.get().await?;
-                        me.channel
+                        channel
                             .sender
                             .send_async(ModuleData::new(Data::Upower(UpowerData::$data_variant(
                                 prop,
@@ -355,7 +356,10 @@ impl ModuleDataProvider for UpowerMod {
                     };
 
                     if let Some(new) = new_time {
-                        me.channel.sender.send(ModuleData::new(Data::Upower(new)))?;
+                        channel
+                            .sender
+                            .send_async(ModuleData::new(Data::Upower(new)))
+                            .await?;
                     }
                 }
                 // Ok::<(), Report>(())
@@ -381,9 +385,12 @@ impl ModuleDataProvider for UpowerMod {
                                 ))
                             })?;
 
-                        me.channel.sender.send(ModuleData::new(Data::Upower(
-                            UpowerData::KeyboardBrightnessPercentage(percent),
-                        )))?;
+                        channel
+                            .sender
+                            .send_async(ModuleData::new(Data::Upower(
+                                UpowerData::KeyboardBrightnessPercentage(percent),
+                            )))
+                            .await?;
                     }
 
                     Ok(())
@@ -397,14 +404,22 @@ impl ModuleDataProvider for UpowerMod {
                 while let Some(b) = stream.next().await {
                     let new_brightness = b.args()?.value;
 
-                    me.channel.sender.send(ModuleData::new(Data::Upower(
-                        UpowerData::KeyboardBrightness(new_brightness),
-                    )))?;
+                    channel
+                        .sender
+                        .send_async(ModuleData::new(Data::Upower(
+                            UpowerData::KeyboardBrightness(new_brightness),
+                        )))
+                        .await?;
                 }
 
                 Ok(())
             })),
         });
+
+        yield_channel.send(ModuleYield {
+            subscription: Some(subscription),
+            fulfilled_requests: requests,
+        })?;
 
         while let Some(prop_stream) = prop_futures.next().await {
             error!("A upower property stream stopped responding!");
