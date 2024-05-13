@@ -4,7 +4,7 @@ use crate::{
 };
 
 /// The different states for a request
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Request {
     Request(RequestField),
     Fulfilled(ModuleData),
@@ -26,7 +26,7 @@ impl Request {
     }
 }
 
-#[derive(Debug, Clone, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum ProviderError {
     #[error("The field you provided is not a field this module supports: {0:?}")]
     InvalidField(RequestField),
@@ -45,3 +45,4 @@ pub struct DataRequest {
     pub id: ModuleId,
     pub data_fields: Vec<Request>,
 }
+impl DataRequest {}

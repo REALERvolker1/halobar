@@ -97,7 +97,7 @@ macro_rules! data_enum {
         }
 
         /// These are the fields that you can request. This is sent to the providers.
-        #[derive(Debug, Clone)]
+        #[derive(Debug, Clone, PartialEq)]
         pub enum RequestField {
             $( $module($req_field_type) ),+
         }
@@ -108,4 +108,7 @@ data_enum! {
     [Time]
     data_type: time::TimeData;
     request_field: String;
+    [Upower]
+    data_type: upower::UpowerData;
+    request_field: upower::UpowerDataDiscriminants;
 }
