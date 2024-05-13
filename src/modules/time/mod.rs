@@ -29,7 +29,7 @@ pub struct Time {
     format_strings: AHashMap<ModuleId, Strftime>,
     // format_alt: String,
     interval: Duration,
-    interface: ProviderData,
+    channel: BiChannel<ModuleData, Event>,
     // state: Mutex<FormatState>,
 }
 impl Time {
@@ -48,38 +48,43 @@ impl Time {
                 specific_target: Some(id),
                 content: Data::Time(TimeData(timestr)),
             })
-            .map(|d| {
+            .map(|d| async {
                 let mod_id = d.specific_target.clone().unwrap();
-                let send = self.interface.data_sender.send(d);
+                let send = self.channel.send(d).await;
 
                 (send, mod_id)
             })
-            .collect::<Box<[_]>>();
+            .collect::<FuturesUnordered<_>>();
 
-        for (was_sent, module) in data.into_iter() {
-            if was_sent.is_err() {
+        while let Some((was_sent, module)) = data.next().await {
+            if !was_sent {
                 self.format_strings.remove(&module);
             }
         }
     }
 }
+
 impl ModuleDataProvider for Time {
     type ServerConfig = TimeConfig;
 
-    async fn init(config: Self::ServerConfig, interface: ProviderData) -> R<Self> {
+    async fn main(
+        config: Self::ServerConfig,
+        mut requests: Vec<DataRequest>,
+        yield_channel: oneshot::Sender<ModuleYield>,
+    ) -> R<()> {
         let my_config = config.into_known();
 
-        Ok(Self {
+        let (channel, subscription) = BiChannel::new(24);
+
+        let mut me = Self {
             format_strings: AHashMap::new(),
             interval: Duration::from_millis(my_config.interval_ms),
-            interface,
-        })
-    }
+            channel,
+        };
 
-    async fn process_data_requests(&mut self, requests: Vec<&mut DataRequest>) -> R<()> {
         let time = Self::get_time();
 
-        for request in requests {
+        for request in requests.iter_mut() {
             for (strf, initial) in request.data_fields.iter_mut() {
                 let stime = Strftime(strf.clone());
 
@@ -88,16 +93,21 @@ impl ModuleDataProvider for Time {
                     content: Data::Time(TimeData(stime.format_time(&time))),
                 });
 
-                self.format_strings.insert(request.id.clone(), stime);
+                me.format_strings.insert(request.id.clone(), stime);
             }
         }
 
-        Ok(())
-    }
+        let yields = ModuleYield {
+            subscription: Some(subscription),
+            fulfilled_requests: requests,
+        };
 
-    async fn run(mut self) -> ! {
+        yield_channel
+            .send(yields)
+            .map_err(|_| Report::msg("Failed to yield data!"))?;
+
         loop {
-            join!(tokio::time::sleep(self.interval), self.tick());
+            join!(tokio::time::sleep(me.interval), me.tick());
         }
     }
 }

@@ -1,6 +1,10 @@
 pub mod time;
 
-use crate::{client::DataRequest, prelude::*, to_frontend::FrontendSender};
+use crate::{
+    client::{DataRequest, ProviderError, Request},
+    prelude::*,
+    to_frontend::FrontendSender,
+};
 use std::cmp::Ordering;
 
 /// A helper to make dbus proxy modules
@@ -25,88 +29,35 @@ pub trait ModuleDataProvider: Sized + Send {
     /// The module is responsible for ensuring this is not too expensive.
     type ServerConfig: Clone;
 
-    /// Any initialization required. Set up listeners, etc. This is step 1 of 3.
+    /// This is the entry point for the data provider. This initializes it with its config,
+    /// its interface to the outside world, and a buffer that tells it what to watch for.
     ///
-    /// Each module added may request new data to be monitored, in that case, it is
-    /// the responsibility of the data provider to ensure these requests are met.
-    async fn init(config: Self::ServerConfig, interface: ProviderData) -> R<Self>;
-
-    /// Process requests for data at init time.
-    ///
-    /// This is step 2 of 3
-    async fn process_data_requests(&mut self, requests: Vec<&mut DataRequest>) -> R<()>;
-
-    /// Run this module (if it is a subscription provider)
-    ///
-    /// This is step 3 of 3
-    async fn run(self) -> !;
-
-    /// Create module data with this backend module's type.
-    ///
-    /// This is a shortcut meant to make stuff easier.
-    fn module_data(content: Data) -> ModuleData {
-        ModuleData {
-            specific_target: None,
-            content,
-        }
-    }
+    /// It takes ownership of the data requests, fulfills them (or provides errors if it can't fulfull them),
+    /// and then passes the request vector back out with initial data values so the frontend can initialize whatever asked for data.
+    async fn main(
+        config: Self::ServerConfig,
+        requests: Vec<DataRequest>,
+        yield_channel: oneshot::Sender<ModuleYield>,
+    ) -> R<()>;
 }
 
-pub struct ProviderData {
-    pub data_sender: FrontendSender<ModuleData>,
-    pub request_receiver: mpsc::Receiver<DataRequest>,
-}
-
-/// All the data that is yielded from each module's `run()` function.
+/// All the data that is yielded from each data provider.
+///
+/// It will provide a channel for events to be sent and data to be received if it
+/// is a dynamic module.
+///
+/// Additionally, it will give the initial data request vector back to the frontend.
 ///
 /// This is required to tie it to the frontend.
 pub struct ModuleYield {
-    pub id: ModuleId,
-    pub initial_data: ModuleData,
-    pub subscription: Option<mpsc::UnboundedReceiver<ModuleData>>,
-}
-impl ModuleYield {
-    /// Compare two yields to each other. Used in the initializer functions
-    pub fn id_ordering(&self, other: &Self) -> Ordering {
-        self.id.cmp(&other.id)
-    }
+    pub subscription: Option<BiChannel<Event, ModuleData>>,
+    pub fulfilled_requests: Vec<DataRequest>,
 }
 
-/// A specific requirement that the module needs to work properly
-#[derive(
-    Debug, PartialEq, Eq, strum_macros::EnumTryAs, Serialize, Deserialize, strum_macros::Display,
-)]
-pub enum ModuleRequirement {
-    SystemDbus,
-    SessionDbus,
-}
-
-// /// The type of module this is. This should contain every single different type of module.
-// #[derive(
-//     Debug,
-//     Clone,
-//     PartialEq,
-//     Eq,
-//     PartialOrd,
-//     Ord,
-//     Hash,
-//     Serialize,
-//     Deserialize,
-//     strum_macros::Display,
-//     strum_macros::AsRefStr,
-//     strum_macros::EnumString,
-// )]
-// #[strum(serialize_all = "kebab-case")]
-// #[serde(rename_all = "kebab-case")]
-// pub enum ModuleType {
-//     Time,
-//     Custom,
+// #[derive(Debug, Clone, PartialEq, Eq)]
+// pub enum Data {
+//     Time(time::TimeData),
 // }
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Data {
-    Time(time::TimeData),
-}
 
 /// Content that can be sent to the frontend.
 ///
@@ -126,4 +77,46 @@ impl ModuleData {
             content: content,
         }
     }
+}
+
+macro_rules! data_enum {
+    ($( [$module:ident] data_type: $( $data_type:ty ),+; request_field: $req_field_type:ty );+$(;)?) => {
+        /// The type of module. Should be tiny and contain nothing
+        #[derive(
+            Debug,
+            Clone,
+            PartialEq,
+            Eq,
+            PartialOrd,
+            Ord,
+            Hash,
+            Serialize,
+            Deserialize,
+            strum_macros::Display,
+            strum_macros::AsRefStr,
+            strum_macros::EnumString,
+        )]
+        pub enum ModuleType {
+            $( $module ),+
+        }
+
+        /// The data a module can provide. This is an enum, with a branch for each
+        /// data provider, and an inner tuple where the data is carried.
+        #[derive(Debug, Clone, PartialEq)]
+        pub enum Data {
+            $( $module($( $data_type ),+) ),+
+        }
+
+        /// These are the fields that you can request. This is sent to the providers.
+        #[derive(Debug, Clone)]
+        pub enum RequestField {
+            $( $module($req_field_type) ),+
+        }
+    };
+}
+
+data_enum! {
+    [Time]
+    data_type: time::TimeData;
+    request_field: String;
 }
