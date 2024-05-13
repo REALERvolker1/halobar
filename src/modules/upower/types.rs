@@ -215,8 +215,3 @@ pub const BATTERY_ICONS_CHARGING: [char; 10] = ['󰢟', '󰢜', '󰂆', '󰂇', 
 
 pub const BATTERY_ICONS_DISCHARGING: [char; 10] =
     ['󰂎', '󰁺', '󰁻', '󰁼', '󰁽', '󰁾', '󰁿', '󰂀', '󰂁', '󰂂'];
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, derive_more::From)]
-pub struct Energy(f64);
-#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, derive_more::From)]
-pub struct EnergyRate(f64);

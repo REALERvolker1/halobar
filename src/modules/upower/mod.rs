@@ -4,10 +4,11 @@ mod xmlgen;
 use std::sync::atomic::AtomicBool;
 
 use super::*;
+use futures_util::future::BoxFuture;
 use types::*;
 use xmlgen::{display_device::DeviceProxy, keyboard::KbdBacklightProxy, upower::UPowerProxy};
 use zbus::{
-    proxy::{CacheProperties, PropertyStream},
+    proxy::{CacheProperties, PropertyChanged, PropertyStream},
     Connection,
 };
 
@@ -52,45 +53,6 @@ impl<'c> Keyboard<'c> {
 
         Percentage::try_new(current_percent.unsigned_abs() as u8).ok()
     }
-
-    pub async fn brightness_percent_listener(
-        &self,
-        data_channel: Arc<mpsc::UnboundedSender<ModuleData>>,
-    ) -> R<()> {
-        let mut stream = self.keyboard.receive_brightness_changed().await?;
-
-        while let Some(b) = stream.next().await {
-            let new_brightness = b.args()?.value;
-            let percent = self
-                .calc_brightness_percent(new_brightness)
-                .ok_or_else(|| {
-                    zbus::Error::Failure(format!("Percentage int {new_brightness} is too big!"))
-                })?;
-
-            data_channel.send(ModuleData::new(Data::Upower(
-                UpowerData::KeyboardBrightnessPercentage(percent),
-            )))?;
-        }
-
-        Ok(())
-    }
-
-    pub async fn brightness_value_listener(
-        &self,
-        data_channel: Arc<mpsc::UnboundedSender<ModuleData>>,
-    ) -> R<()> {
-        let mut stream = self.keyboard.receive_brightness_changed().await?;
-
-        while let Some(b) = stream.next().await {
-            let new_brightness = b.args()?.value;
-
-            data_channel.send(ModuleData::new(Data::Upower(
-                UpowerData::KeyboardBrightness(new_brightness),
-            )))?;
-        }
-
-        Ok(())
-    }
 }
 
 /// This is here because I need to always know this bool to determine some other states.
@@ -115,7 +77,7 @@ struct Upower<'c> {
 
     /// I use these containers for my own convenience.
     /// These hold the data that already was sent, but that is updated.
-    props: RefCell<Vec<UpowerData>>,
+    props: RwLock<Vec<UpowerData>>,
 }
 impl<'c> Upower<'c> {
     pub async fn new(conn: &'c Connection, device_path: String) -> R<Self> {
@@ -144,7 +106,7 @@ impl<'c> Upower<'c> {
             upower,
             device,
             keyboard: OnceCell::new(),
-            props: RefCell::new(Vec::new()),
+            props: RwLock::new(Vec::new()),
         })
     }
 
@@ -174,7 +136,7 @@ impl<'c> Upower<'c> {
 
         // I may already have it cached
         {
-            let props = self.props.borrow();
+            let props = self.props.read().await;
 
             for data in props.iter() {
                 let data_type: UpowerDataDiscriminants = data.try_into()?;
@@ -195,7 +157,7 @@ impl<'c> Upower<'c> {
                                 Ok(prop) => {
                                     // listener_set.push($listener_future);
                                     {
-                                        let mut borrowed = self.props.borrow_mut();
+                                        let mut borrowed = self.props.write().await;
                                         borrowed.push(UpowerData::$enum_arm(prop.clone()));
                                     }
                                     Some(UpowerData::$enum_arm(prop))
@@ -288,15 +250,6 @@ pub struct UpowerMod {
     conn: Connection,
     channel: BiChannel<ModuleData, Event>,
 }
-impl<'c> UpowerMod {
-    async fn listen_to_stream<T>(&'c self, mut stream: PropertyStream<'c, T>) -> R<()>
-    where
-        T: std::any::Any,
-    {
-        while let Some(change) = stream.
-        Ok(())
-    }
-}
 impl ModuleDataProvider for UpowerMod {
     type ServerConfig = UpowerConfig;
     async fn main(
@@ -322,20 +275,142 @@ impl ModuleDataProvider for UpowerMod {
             }
         }
 
+        let (channel, yield_receiver) = BiChannel::new(16);
+
+        let me = Self {
+            conn: conn.clone(),
+            channel,
+        };
+
         // I need to loop over all the requested types one more time because
         // I could not return futures referencing self in upower.fulfill_initial_request()
         // and I want this to be single-threaded.
-
-        {
-            let props = upower
+        let props = {
+            upower
                 .props
-                .borrow()
+                .read()
+                .await
                 .iter()
                 .filter_map(|prop| {
                     let discriminant: UpowerDataDiscriminants = prop.try_into().ok()?;
                     Some(discriminant)
                 })
-                .map(|disc| disc);
+                .collect::<Box<[_]>>()
+        };
+
+        let mut prop_futures: FuturesUnordered<BoxFuture<R<()>>> = FuturesUnordered::new();
+
+        macro_rules! typical_stream {
+            ($stream:expr => $data_variant:ident) => {
+                prop_futures.push(Box::pin(async {
+                    let mut stream = $stream.await;
+
+                    while let Some(p) = stream.next().await {
+                        let prop = p.get().await?;
+                        me.channel
+                            .sender
+                            .send_async(ModuleData::new(Data::Upower(UpowerData::$data_variant(
+                                prop,
+                            ))))
+                            .await?;
+                    }
+
+                    Ok::<(), Report>(())
+                }))
+            };
+        }
+
+        props.into_iter().for_each(|disc| match disc {
+            // These are static, so I don't need to wait for changes
+            UpowerDataDiscriminants::CriticalAction
+            | UpowerDataDiscriminants::KeyboardBrightnessMax => {}
+
+            UpowerDataDiscriminants::Energy => {
+                typical_stream!(upower.device.receive_energy_changed() => Energy)
+            }
+            UpowerDataDiscriminants::EnergyRate => {
+                typical_stream!(upower.device.receive_energy_rate_changed() => EnergyRate)
+            }
+            UpowerDataDiscriminants::Icon => {
+                typical_stream!(upower.device.receive_icon_name_changed() => Icon)
+            }
+            UpowerDataDiscriminants::Percentage => {
+                typical_stream!(upower.device.receive_percentage_changed() => Percentage)
+            }
+            UpowerDataDiscriminants::State => {
+                typical_stream!(upower.device.receive_state_changed() => State)
+            }
+            UpowerDataDiscriminants::Time => prop_futures.push(Box::pin(async {
+                let mut empty_stream = upower.device.receive_time_to_empty_changed().await;
+                let mut full_stream = upower.device.receive_time_to_full_changed().await;
+                loop {
+                    let new_time = select! {
+                        Some(empty) = empty_stream.next() => {
+                            UpowerData::time_property_changed(empty, true).await?
+                        }
+
+                        Some(full) = full_stream.next() => {
+                            UpowerData::time_property_changed(full, false).await?
+                        }
+                    };
+
+                    if let Some(new) = new_time {
+                        me.channel.sender.send(ModuleData::new(Data::Upower(new)))?;
+                    }
+                }
+                // Ok::<(), Report>(())
+            })),
+            UpowerDataDiscriminants::DeviceType => {
+                typical_stream!(upower.device.receive_type__changed() => DeviceType)
+            }
+            UpowerDataDiscriminants::WarningLevel => {
+                typical_stream!(upower.device.receive_warning_level_changed() => WarningLevel)
+            }
+            UpowerDataDiscriminants::KeyboardBrightnessPercentage => {
+                prop_futures.push(Box::pin(async {
+                    let keyboard = upower.get_keyboard().await?;
+                    let mut stream = keyboard.keyboard.receive_brightness_changed().await?;
+
+                    while let Some(b) = stream.next().await {
+                        let new_brightness = b.args()?.value;
+                        let percent = keyboard
+                            .calc_brightness_percent(new_brightness)
+                            .ok_or_else(|| {
+                                zbus::Error::Failure(format!(
+                                    "Percentage int {new_brightness} is too big!"
+                                ))
+                            })?;
+
+                        me.channel.sender.send(ModuleData::new(Data::Upower(
+                            UpowerData::KeyboardBrightnessPercentage(percent),
+                        )))?;
+                    }
+
+                    Ok(())
+                }))
+            }
+
+            UpowerDataDiscriminants::KeyboardBrightness => prop_futures.push(Box::pin(async {
+                let keyboard = upower.get_keyboard().await?;
+                let mut stream = keyboard.keyboard.receive_brightness_changed().await?;
+
+                while let Some(b) = stream.next().await {
+                    let new_brightness = b.args()?.value;
+
+                    me.channel.sender.send(ModuleData::new(Data::Upower(
+                        UpowerData::KeyboardBrightness(new_brightness),
+                    )))?;
+                }
+
+                Ok(())
+            })),
+        });
+
+        while let Some(prop_stream) = prop_futures.next().await {
+            error!("A upower property stream stopped responding!");
+            if let Err(e) = prop_stream {
+                error!("{e}");
+            }
         }
 
         Ok(())
@@ -351,6 +426,8 @@ pub enum UpowerData {
     Percentage(Percentage),
     State(BatteryState),
     Time(Duration),
+    /// Usually this can only change when using DisplayDevice.
+    /// It cannot change when the user selected a custom path.
     DeviceType(DeviceType),
     WarningLevel(WarningLevel),
 
@@ -358,4 +435,21 @@ pub enum UpowerData {
     KeyboardBrightnessPercentage(Percentage),
     KeyboardBrightness(i32),
     KeyboardBrightnessMax(i32),
+}
+impl UpowerData {
+    pub async fn time_property_changed(
+        prop: PropertyChanged<'_, i64>,
+        is_discharging_prop: bool,
+    ) -> zbus::Result<Option<Self>> {
+        // if it is not on battery, but the prop is not the battery prop for example
+        if on_battery() != is_discharging_prop {
+            return Ok(None);
+        }
+
+        let property = prop.get().await?;
+
+        let time_seconds = Duration::from_secs(property.unsigned_abs());
+
+        Ok(Some(Self::Time(time_seconds)))
+    }
 }
