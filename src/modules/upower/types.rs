@@ -136,6 +136,39 @@ pub enum DeviceType {
 }
 zvariant!(u32 => DeviceType);
 
+/// For some asinine reason, UPower returns a String
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    PartialEq,
+    Eq,
+    Default,
+    strum_macros::Display,
+    strum_macros::FromRepr,
+    strum_macros::AsRefStr,
+    strum_macros::EnumString,
+    zvariant::Type,
+    Deserialize,
+    Serialize,
+)]
+pub enum CriticalAction {
+    #[default]
+    Unknown,
+    HybridSleep,
+    Hibernate,
+    PowerOff,
+}
+impl TryFrom<::zbus::zvariant::OwnedValue> for CriticalAction {
+    type Error = zvariant::Error;
+    fn try_from(value: ::zbus::zvariant::OwnedValue) -> Result<Self, Self::Error> {
+        let value_string: String = value.try_into()?;
+
+        let me = Self::from_str(&value_string).unwrap_or_default();
+        Ok(me)
+    }
+}
+
 pub const BATTERY_ICONS_CHARGING: [char; 10] = ['󰢟', '󰢜', '󰂆', '󰂇', '󰂈', '󰢝', '󰂉', '󰢞', '󰂊', '󰂋'];
 
 pub const BATTERY_ICONS_DISCHARGING: [char; 10] =

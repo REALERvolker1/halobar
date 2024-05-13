@@ -19,11 +19,13 @@
 //!
 //! [Writing a client proxy]: https://dbus2.github.io/zbus/client.html
 //! [D-Bus standard interfaces]: https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces,
+
 use zbus::proxy;
 #[proxy(
     interface = "org.freedesktop.UPower.KbdBacklight",
     default_service = "org.freedesktop.UPower",
-    default_path = "/org/freedesktop/UPower/KbdBacklight"
+    default_path = "/org/freedesktop/UPower/KbdBacklight",
+    gen_blocking = false
 )]
 trait KbdBacklight {
     /// GetBrightness method

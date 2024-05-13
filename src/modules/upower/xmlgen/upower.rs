@@ -23,16 +23,32 @@ use zbus::proxy;
 #[proxy(
     interface = "org.freedesktop.UPower",
     default_service = "org.freedesktop.UPower",
-    default_path = "/org/freedesktop/UPower"
+    default_path = "/org/freedesktop/UPower",
+    gen_blocking = false
 )]
 trait UPower {
     /// EnumerateDevices method
     fn enumerate_devices(&self) -> zbus::Result<Vec<zbus::zvariant::OwnedObjectPath>>;
 
-    /// GetCriticalAction method
+    /// When the system's power supply is critical (critically low batteries or UPS), the system will take this action.
     fn get_critical_action(&self) -> zbus::Result<String>;
 
-    /// GetDisplayDevice method
+    /// Get the object to the "display device", a composite device that represents the status icon to show in desktop environments.
+    /// You can also access the object directly as its path is guaranteed to be `/org/freedesktop/UPower/devices/DisplayDevice`.
+    /// The following standard org.freedesktop.UPower.Device properties will be defined (only `IsPresent` takes a special meaning):
+    ///
+    ///
+    /// - **Type**: the type of the display device, UPS or Battery. Note that this value can change, as opposed to real devices.
+    /// - **State**: the power state of the display device, such as Charging or Discharging.
+    /// - **Percentage**: the amount of energy left on the device.
+    /// - **Energy**: Amount of energy (measured in Wh) currently available in the power source.
+    /// - **EnergyFull**: Amount of energy (measured in Wh) in the power source when it's considered full.
+    /// - **EnergyRate**: Discharging/charging rate of the source, measured in Watt.
+    /// - **TimeToEmpty**: Number of seconds until the power source is considered empty.
+    /// - **TimeToFull**: Number of seconds until the power source is considered full.
+    /// - **IsPresent**: Whether a status icon using this information should be presented.
+    /// - **IconName**: An icon name representing the device state.
+    /// - **WarningLevel**: The same as the overall `WarningLevel`
     fn get_display_device(&self) -> zbus::Result<zbus::zvariant::OwnedObjectPath>;
 
     /// DeviceAdded signal
